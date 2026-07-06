@@ -66,6 +66,7 @@ class Parser {
     void parse();
     void verifyIntegrity();
     void printExpressions();
+    void verifySpecialRegisters(Instruction *instruction);
 };
 
 struct InstructionDefinition {
@@ -76,11 +77,25 @@ struct InstructionDefinition {
 
 class Dictionary {
   public:
+    static void addInstruction(std::unique_ptr<InstructionDefinition> def) {
+        instructions.push_back(std::move(def));
+    }
+
+    static const std::vector<std::unique_ptr<InstructionDefinition>> &all() {
+        return instructions;
+    }
+
+    static void registerAllInstructions();
+
+  private:
+    static inline std::vector<std::unique_ptr<InstructionDefinition>>
+        instructions;
 };
 
 namespace utils {
 std::vector<std::string> split(std::string str, char separator);
 std::string trim(std::string str);
+int parseNumber(const std::string &s);
 } // namespace utils
 
 #endif

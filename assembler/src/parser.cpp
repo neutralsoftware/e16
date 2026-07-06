@@ -29,12 +29,37 @@ std::string utils::trim(std::string str) {
         str = str.substr(1);
 
     while (!str.empty() && std::isspace(static_cast<unsigned char>(str.back())))
-        str.substr(0, str.length() - 1);
+        str = str.substr(0, str.length() - 1);
 
     return str;
 }
 
-Parser::Parser(const std::string &input) : input(input) {}
+int utils::parseNumber(const std::string &s) {
+    size_t pos = 0;
+    int value;
+
+    if (s.starts_with("0x")) {
+        value = std::stoi(s, &pos, 16);
+    } else if (s.starts_with("0b")) {
+        value = std::stoi(s.substr(2), &pos, 2);
+        pos += 2;
+    } else if (s.starts_with("0o")) {
+        value = std::stoi(s.substr(2), &pos, 8);
+        pos += 2;
+    } else {
+        value = std::stoi(s, &pos, 10);
+    }
+
+    if (pos != s.size()) {
+        throw std::invalid_argument("Invalid numeric literal");
+    }
+
+    return value;
+}
+
+Parser::Parser(const std::string &input) : input(input) {
+    Dictionary::registerAllInstructions();
+}
 
 void Parser::parse() {
     for (const std::vector<std::string> lines = utils::split(input, '\n');
@@ -140,7 +165,75 @@ void Parser::parse() {
     }
 }
 
-void Parser::verifyIntegrity() {}
+void Parser::verifyIntegrity() {
+    for (auto &expression : expressions) {
+        if (expression->type == ExpressionType::Directive) {
+            auto directive = dynamic_cast<Directive *>(expression.get());
+            if (directive->name == ".const" || directive->name == ".constant") {
+                continue;
+            }
+            throw std::runtime_error("Directive " + directive->name +
+                                     " is not a valid directive.");
+        }
+        if (expression->type == ExpressionType::Instruction) {
+            auto instruction = dynamic_cast<Instruction *>(expression.get());
+            bool foundMatch = false;
+            for (auto &validInstruction : Dictionary::all()) {
+                if (instruction->opcode == validInstruction->name &&
+                    instruction->operands.size() ==
+                        validInstruction->argumentCount) {
+                    foundMatch = true;
+
+                    for (auto argument : instruction->operands) {
+                        if (argument.starts_with("0") ||
+                            isnumber(argument[0])) {
+                            try {
+                                int val = utils::parseNumber(argument);
+                                (void)val;
+                            } catch (...) {
+                                throw std::runtime_error(
+                                    "String '" + argument +
+                                    "' was detected as a number but cannot be "
+                                    "parsed as one.");
+                            }
+                        }
+
+                        if (argument.starts_with("r")) {
+                            if (argument.length() > 3) {
+                                throw std::runtime_error(
+                                    "The E16 can just address "
+                                    "registers from r0 to r15.");
+                            }
+                            int registerNum = std::stoi(argument.substr(1));
+                            if (registerNum > 15) {
+                                throw std::runtime_error(
+                                    "Register " + argument +
+                                    " is invalid in the E16 architecture.");
+                            }
+                        }
+                    }
+
+                    verifySpecialRegisters(instruction);
+                    continue;
+                }
+                if (instruction->opcode == validInstruction->name &&
+                    instruction->operands.size() !=
+                        validInstruction->argumentCount) {
+                    throw std::runtime_error(
+                        "Instruction " + instruction->opcode + " expected " +
+                        std::to_string(validInstruction->argumentCount) +
+                        " arguments but instead " +
+                        std::to_string(instruction->operands.size()) +
+                        " were provided.");
+                }
+            }
+            if (!foundMatch) {
+                throw std::runtime_error("Instruction " + instruction->opcode +
+                                         " is not a valid instruction.");
+            }
+        }
+    }
+}
 
 void Parser::printExpressions() {
     std::cout << "Parsing has " << expressions.size() << " expressions. "
@@ -161,6 +254,23 @@ void Parser::printExpressions() {
             for (auto operand : instruction->operands) {
                 std::cout << "    " << operand << std::endl;
             }
+        }
+    }
+}
+
+void Parser::verifySpecialRegisters(Instruction *instruction) {
+    for (auto argument : instruction->operands) {
+        if (argument == "pc" || argument == "sp" || argument == "fp" ||
+            argument == "fl" || argument == "dp" || argument == "ivt") {
+            if (instruction->opcode == "mov") {
+                throw std::runtime_error(
+                    "For readability, try to address special registers like " +
+                    argument + " with 'get' and 'set'");
+            }
+        } else if (instruction->opcode == "get" ||
+                   instruction->opcode == "set") {
+            throw std::runtime_error(
+                "Only special registers can be modified with 'get' or 'set'");
         }
     }
 }
