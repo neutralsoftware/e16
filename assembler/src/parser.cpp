@@ -1,8 +1,62 @@
 #include <parser.h>
 
+#include <cctype>
 #include <iostream>
+#include <stdexcept>
 #include <string>
 #include <vector>
+
+namespace {
+bool isSpecialRegister(const std::string &val) {
+    return val == "pc" || val == "sp" || val == "fp" || val == "fl" ||
+           val == "dp" || val == "ivt";
+}
+
+bool isGeneralRegister(const std::string &val) {
+    if (!val.starts_with("r") || val.length() < 2 || val.length() > 3) {
+        return false;
+    }
+
+    for (size_t i = 1; i < val.length(); i++) {
+        if (!std::isdigit(static_cast<unsigned char>(val[i]))) {
+            return false;
+        }
+    }
+
+    int registerNum = std::stoi(val.substr(1));
+    return registerNum >= 0 && registerNum < 16;
+}
+
+bool isIdentifier(const std::string &val) {
+    if (val.empty()) {
+        return false;
+    }
+
+    unsigned char first = static_cast<unsigned char>(val[0]);
+    if (!std::isalpha(first) && val[0] != '_' && val[0] != '.') {
+        return false;
+    }
+
+    for (char c : val) {
+        unsigned char ch = static_cast<unsigned char>(c);
+        if (!std::isalnum(ch) && c != '_' && c != '.') {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+size_t findOffsetOperator(const std::string &val) {
+    for (size_t i = 1; i < val.size(); i++) {
+        if (val[i] == '+' || val[i] == '-') {
+            return i;
+        }
+    }
+
+    return std::string::npos;
+}
+}
 
 std::vector<std::string> utils::split(std::string str, char separator) {
     std::vector<std::string> parts;
@@ -23,6 +77,66 @@ std::vector<std::string> utils::split(std::string str, char separator) {
     return parts;
 }
 
+std::vector<std::string> utils::splitArguments(const std::string &str) {
+    std::vector<std::string> parts;
+    std::string current;
+    bool inString = false;
+    bool escaped = false;
+    char quote = '\0';
+    int parenDepth = 0;
+
+    for (char c : str) {
+        if (escaped) {
+            current += c;
+            escaped = false;
+            continue;
+        }
+
+        if (inString && c == '\\') {
+            current += c;
+            escaped = true;
+            continue;
+        }
+
+        if ((c == '"' || c == '\'') && !inString) {
+            inString = true;
+            quote = c;
+            current += c;
+            continue;
+        }
+
+        if (inString && c == quote) {
+            inString = false;
+            current += c;
+            continue;
+        }
+
+        if (!inString && c == '(') {
+            parenDepth++;
+        } else if (!inString && c == ')' && parenDepth > 0) {
+            parenDepth--;
+        }
+
+        if (!inString && parenDepth == 0 && c == ',') {
+            std::string argument = trim(current);
+            if (!argument.empty()) {
+                parts.push_back(argument);
+            }
+            current.clear();
+            continue;
+        }
+
+        current += c;
+    }
+
+    std::string argument = trim(current);
+    if (!argument.empty()) {
+        parts.push_back(argument);
+    }
+
+    return parts;
+}
+
 std::string utils::trim(std::string str) {
     while (!str.empty() &&
            std::isspace(static_cast<unsigned char>(str.front())))
@@ -34,47 +148,105 @@ std::string utils::trim(std::string str) {
     return str;
 }
 
+std::string utils::stripComment(const std::string &str) {
+    bool inString = false;
+    bool escaped = false;
+    char quote = '\0';
+
+    for (size_t i = 0; i < str.length(); i++) {
+        char c = str[i];
+
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+
+        if (inString && c == '\\') {
+            escaped = true;
+            continue;
+        }
+
+        if ((c == '"' || c == '\'') && !inString) {
+            inString = true;
+            quote = c;
+            continue;
+        }
+
+        if (inString && c == quote) {
+            inString = false;
+            continue;
+        }
+
+        if (!inString && c == ';') {
+            return str.substr(0, i);
+        }
+    }
+
+    return str;
+}
+
 int utils::parseNumber(const std::string &s) {
     size_t pos = 0;
     int value;
+    int sign = 1;
+    std::string number = trim(s);
 
-    if (s.starts_with("0x")) {
-        value = std::stoi(s, &pos, 16);
-    } else if (s.starts_with("0b")) {
-        value = std::stoi(s.substr(2), &pos, 2);
-        pos += 2;
-    } else if (s.starts_with("0o")) {
-        value = std::stoi(s.substr(2), &pos, 8);
-        pos += 2;
-    } else {
-        value = std::stoi(s, &pos, 10);
-    }
-
-    if (pos != s.size()) {
+    if (number.empty()) {
         throw std::invalid_argument("Invalid numeric literal");
     }
 
-    return value;
+    if (number[0] == '+' || number[0] == '-') {
+        if (number[0] == '-') {
+            sign = -1;
+        }
+        number = number.substr(1);
+    }
+
+    if (number.empty()) {
+        throw std::invalid_argument("Invalid numeric literal");
+    }
+
+    if (number.starts_with("0x") || number.starts_with("0X")) {
+        value = std::stoi(number, &pos, 16);
+    } else if (number.starts_with("0b") || number.starts_with("0B")) {
+        value = std::stoi(number.substr(2), &pos, 2);
+        pos += 2;
+    } else if (number.starts_with("0o") || number.starts_with("0O")) {
+        value = std::stoi(number.substr(2), &pos, 8);
+        pos += 2;
+    } else {
+        value = std::stoi(number, &pos, 10);
+    }
+
+    if (pos != number.size()) {
+        throw std::invalid_argument("Invalid numeric literal");
+    }
+
+    return value * sign;
 }
 
 Parser::Parser(const std::string &input) : input(input) {
     Dictionary::registerAllInstructions();
 }
 
+void Parser::fail(std::size_t line, const std::string &message) const {
+    throw std::runtime_error("line " + std::to_string(line) + ": " + message);
+}
+
 void Parser::parse() {
-    for (const std::vector<std::string> lines = utils::split(input, '\n');
-         std::string line : lines) {
-        std::string trimmedLine = utils::trim(line);
+    const std::vector<std::string> lines = utils::split(input, '\n');
+    for (size_t lineIndex = 0; lineIndex < lines.size(); lineIndex++) {
+        std::size_t lineNumber = lineIndex + 1;
+        std::string trimmedLine =
+            utils::trim(utils::stripComment(lines[lineIndex]));
         if (trimmedLine.empty()) {
             continue;
         }
         if (trimmedLine[trimmedLine.length() - 1] == ':') {
-            // Label
             expressions.push_back(std::make_unique<Label>(
-                trimmedLine.substr(0, trimmedLine.length() - 1)));
+                trimmedLine.substr(0, trimmedLine.length() - 1), lineNumber));
         } else if (trimmedLine[0] == '.') {
             std::string name;
-            std::vector<std::string> arguments;
 
             size_t i = 0;
 
@@ -89,37 +261,13 @@ void Parser::parse() {
                 i++;
             }
 
-            while (i < trimmedLine.length()) {
-                std::string argument;
-
-                while (i < trimmedLine.length() && trimmedLine[i] != ',') {
-                    argument += trimmedLine[i];
-                    i++;
-                }
-
-                argument = std::string(utils::trim(argument));
-
-                if (!argument.empty()) {
-                    arguments.push_back(argument);
-                }
-
-                if (i < trimmedLine.length() && trimmedLine[i] == ',') {
-                    i++;
-                }
-
-                while (
-                    i < trimmedLine.length() &&
-                    std::isblank(static_cast<unsigned char>(trimmedLine[i]))) {
-                    i++;
-                }
-            }
+            std::vector<std::string> arguments =
+                utils::splitArguments(trimmedLine.substr(i));
 
             expressions.push_back(std::make_unique<Directive>(
-                name, arguments, std::string(trimmedLine)));
+                name, arguments, std::string(trimmedLine), lineNumber));
         } else {
-            // Instructions
             std::string opcode;
-            std::vector<std::string> operands;
 
             size_t i = 0;
 
@@ -134,33 +282,11 @@ void Parser::parse() {
                 i++;
             }
 
-            while (i < trimmedLine.length()) {
-                std::string argument;
-
-                while (i < trimmedLine.length() && trimmedLine[i] != ',') {
-                    argument += trimmedLine[i];
-                    i++;
-                }
-
-                argument = std::string(utils::trim(argument));
-
-                if (!argument.empty()) {
-                    operands.push_back(argument);
-                }
-
-                if (i < trimmedLine.length() && trimmedLine[i] == ',') {
-                    i++;
-                }
-
-                while (
-                    i < trimmedLine.length() &&
-                    std::isblank(static_cast<unsigned char>(trimmedLine[i]))) {
-                    i++;
-                }
-            }
+            std::vector<std::string> operands =
+                utils::splitArguments(trimmedLine.substr(i));
 
             expressions.push_back(std::make_unique<Instruction>(
-                opcode, operands, std::string(trimmedLine)));
+                opcode, operands, std::string(trimmedLine), lineNumber));
         }
     }
 }
@@ -169,11 +295,14 @@ void Parser::verifyIntegrity() {
     for (auto &expression : expressions) {
         if (expression->type == ExpressionType::Directive) {
             auto directive = dynamic_cast<Directive *>(expression.get());
-            if (directive->name == ".const" || directive->name == ".constant") {
+            if (directive->name == ".const" || directive->name == ".constant" ||
+                directive->name == ".string" || directive->name == ".data" ||
+                directive->name == ".byte" || directive->name == ".word" ||
+                directive->name == ".addr24") {
                 continue;
             }
-            throw std::runtime_error("Directive " + directive->name +
-                                     " is not a valid directive.");
+            fail(directive->line,
+                 "Directive " + directive->name + " is not a valid directive.");
         }
         if (expression->type == ExpressionType::Instruction) {
             auto instruction = dynamic_cast<Instruction *>(expression.get());
@@ -186,30 +315,28 @@ void Parser::verifyIntegrity() {
 
                     for (auto argument : instruction->operands) {
                         if (argument.starts_with("0") ||
-                            isnumber(argument[0])) {
+                            std::isdigit(
+                                static_cast<unsigned char>(argument[0]))) {
                             try {
                                 int val = utils::parseNumber(argument);
                                 (void)val;
                             } catch (...) {
-                                throw std::runtime_error(
-                                    "String '" + argument +
-                                    "' was detected as a number but cannot be "
-                                    "parsed as one.");
+                                fail(instruction->line,
+                                     "String '" + argument +
+                                         "' was detected as a number but "
+                                         "cannot be "
+                                         "parsed as one.");
                             }
                         }
 
-                        if (argument.starts_with("r")) {
-                            if (argument.length() > 3) {
-                                throw std::runtime_error(
-                                    "The E16 can just address "
-                                    "registers from r0 to r15.");
-                            }
-                            int registerNum = std::stoi(argument.substr(1));
-                            if (registerNum > 15) {
-                                throw std::runtime_error(
-                                    "Register " + argument +
-                                    " is invalid in the E16 architecture.");
-                            }
+                        if (argument.starts_with("r") &&
+                            argument.length() > 1 &&
+                            std::isdigit(
+                                static_cast<unsigned char>(argument[1])) &&
+                            !isGeneralRegister(argument)) {
+                            fail(instruction->line,
+                                 "Register " + argument +
+                                     " is invalid in the E16 architecture.");
                         }
                     }
 
@@ -219,17 +346,17 @@ void Parser::verifyIntegrity() {
                 if (instruction->opcode == validInstruction->name &&
                     instruction->operands.size() !=
                         validInstruction->argumentCount) {
-                    throw std::runtime_error(
-                        "Instruction " + instruction->opcode + " expected " +
-                        std::to_string(validInstruction->argumentCount) +
-                        " arguments but instead " +
-                        std::to_string(instruction->operands.size()) +
-                        " were provided.");
+                    fail(instruction->line,
+                         "Instruction " + instruction->opcode + " expected " +
+                             std::to_string(validInstruction->argumentCount) +
+                             " arguments but instead " +
+                             std::to_string(instruction->operands.size()) +
+                             " were provided.");
                 }
             }
             if (!foundMatch) {
-                throw std::runtime_error("Instruction " + instruction->opcode +
-                                         " is not a valid instruction.");
+                fail(instruction->line, "Instruction " + instruction->opcode +
+                                            " is not a valid instruction.");
             }
         }
     }
@@ -278,18 +405,31 @@ void Parser::printExpressions() {
 }
 
 void Parser::verifySpecialRegisters(Instruction *instruction) {
+    if (instruction->opcode == "get") {
+        if (!isGeneralRegister(instruction->operands[0]) ||
+            !isSpecialRegister(instruction->operands[1])) {
+            fail(instruction->line,
+                 "get expects a general register followed by a special "
+                 "register.");
+        }
+        return;
+    }
+
+    if (instruction->opcode == "set") {
+        if (!isSpecialRegister(instruction->operands[0])) {
+            fail(instruction->line,
+                 "set expects a special register as its first argument.");
+        }
+        return;
+    }
+
     for (auto argument : instruction->operands) {
-        if (argument == "pc" || argument == "sp" || argument == "fp" ||
-            argument == "fl" || argument == "dp" || argument == "ivt") {
+        if (isSpecialRegister(argument)) {
             if (instruction->opcode == "mov") {
-                throw std::runtime_error(
-                    "For readability, try to address special registers like " +
-                    argument + " with 'get' and 'set'");
+                fail(instruction->line,
+                     "For readability, try to address special registers like " +
+                         argument + " with 'get' and 'set'");
             }
-        } else if (instruction->opcode == "get" ||
-                   instruction->opcode == "set") {
-            throw std::runtime_error(
-                "Only special registers can be modified with 'get' or 'set'");
         }
     }
 }
@@ -300,7 +440,6 @@ void Parser::parseAddressingModes() {
             auto *instruction = dynamic_cast<Instruction *>(expression.get());
             instruction->parsedOperands.clear();
             for (std::string operand : instruction->operands) {
-                // Immediate
                 try {
                     int val = utils::parseNumber(operand);
                     (void)val;
@@ -310,14 +449,12 @@ void Parser::parseAddressingModes() {
                 } catch (...) {
                 }
 
-                // Register
                 if (isRegister(operand)) {
                     instruction->parsedOperands.push_back(
                         InstructionOperand(AddressingMode::Register, operand));
                     continue;
                 }
 
-                // Direct Page Offset Mode
                 if (operand.starts_with("dp:")) {
                     try {
                         int val = utils::parseNumber(operand.substr(3));
@@ -326,13 +463,13 @@ void Parser::parseAddressingModes() {
                                                "dp", val));
                         continue;
                     } catch (...) {
-                        throw std::runtime_error("Badly formulated direct page "
-                                                 "offset mode argument " +
-                                                 operand + ".");
+                        fail(instruction->line,
+                             "Badly formulated direct page offset mode "
+                             "argument " +
+                                 operand + ".");
                     }
                 }
 
-                // Stack-Relative Address Mode
                 if (operand.starts_with("#")) {
                     try {
                         int val = utils::parseNumber(operand.substr(1));
@@ -341,15 +478,14 @@ void Parser::parseAddressingModes() {
                                                "sp", val));
                         continue;
                     } catch (...) {
-                        throw std::runtime_error(
-                            "Badly formulated stack-relative "
-                            "offset mode argument " +
-                            operand + ".");
+                        fail(instruction->line,
+                             "Badly formulated stack-relative "
+                             "offset mode argument " +
+                                 operand + ".");
                     }
                 }
 
                 if (operand[0] == '@') {
-                    // Immediate
                     try {
                         int val = utils::parseNumber(operand.substr(1));
                         (void)val;
@@ -360,7 +496,6 @@ void Parser::parseAddressingModes() {
                     } catch (...) {
                     }
 
-                    // Register Indirect
                     if (isRegister(operand.substr(1))) {
                         instruction->parsedOperands.push_back(
                             InstructionOperand(AddressingMode::RegisterIndirect,
@@ -368,31 +503,31 @@ void Parser::parseAddressingModes() {
                         continue;
                     }
 
-                    if (operand[1] == '(') {
-                        std::string left;
-                        char sign;
-                        std::string right;
+                    if (operand.length() > 2 && operand[1] == '(' &&
+                        operand.back() == ')') {
+                        std::string inner = utils::trim(
+                            operand.substr(2, operand.length() - 3));
+                        size_t signPos = findOffsetOperator(inner);
 
-                        int i = 2;
-                        bool inLeft = true;
-                        while (i < operand.size()) {
-                            char c = operand[i];
-                            if (inLeft && c != '+' && c != '-') {
-                                left = left + c;
-                            }
-                            if (c == '+' || c == '-') {
-                                inLeft = false;
-                                sign = c;
-                            } else if (!inLeft && c != ')') {
-                                right = right + c;
-                            }
-                            i++;
+                        if (signPos == std::string::npos) {
+                            fail(instruction->line,
+                                 "Badly formulated mode for argument " +
+                                     operand);
                         }
 
-                        left = utils::trim(left);
-                        right = utils::trim(right);
+                        std::string left =
+                            utils::trim(inner.substr(0, signPos));
+                        char sign;
+                        sign = inner[signPos];
+                        std::string right =
+                            utils::trim(inner.substr(signPos + 1));
 
-                        // Indexed
+                        if (left.empty() || right.empty()) {
+                            fail(instruction->line,
+                                 "Badly formulated mode for argument " +
+                                     operand);
+                        }
+
                         if (isRegister(right) && sign == '+') {
                             instruction->parsedOperands.push_back(
                                 InstructionOperand(AddressingMode::Indexed,
@@ -402,27 +537,37 @@ void Parser::parseAddressingModes() {
 
                         if (isRegister(left)) {
                             try {
-                                int val = utils::parseNumber(sign + right);
+                                int val = utils::parseNumber(
+                                    (sign == '-' ? "-" : "") + right);
                                 instruction->parsedOperands.push_back(
-                                    InstructionOperand(AddressingMode::Absolute,
-                                                       left, val));
+                                    InstructionOperand(
+                                        AddressingMode::BasePlusOffset, left,
+                                        val));
                                 continue;
                             } catch (...) {
-                                throw std::runtime_error(
-                                    "The offsetting mode for argument " +
-                                    operand + " is badly formulated");
+                                fail(instruction->line,
+                                     "The offsetting mode for argument " +
+                                         operand + " is badly formulated");
                             }
                         }
 
-                        // Checking labels
-                        throw std::runtime_error(
-                            "Badly formulated mode for argument " + operand);
+                        fail(instruction->line,
+                             "Badly formulated mode for argument " + operand);
+                    }
+
+                    if (isIdentifier(operand.substr(1))) {
+                        instruction->parsedOperands.push_back(
+                            InstructionOperand(AddressingMode::Absolute,
+                                               operand.substr(1)));
+                        continue;
                     }
                 }
 
-                // Label
                 bool foundLabelOrConstant = false;
                 for (auto &candidate : expressions) {
+                    if (foundLabelOrConstant) {
+                        break;
+                    }
                     if (candidate->type == ExpressionType::Label) {
                         Label *label = dynamic_cast<Label *>(candidate.get());
                         if (label->name == operand) {
@@ -437,9 +582,9 @@ void Parser::parseAddressingModes() {
                         if (directive->name == ".const" ||
                             directive->name == ".constant") {
                             if (directive->arguments.size() != 2) {
-                                throw std::runtime_error(
-                                    "A constant directive must have exactly "
-                                    "two arguments.");
+                                fail(directive->line,
+                                     "A constant directive must have exactly "
+                                     "two arguments.");
                             }
                             std::string name = directive->arguments[0];
                             std::string substitution = directive->arguments[1];
@@ -453,9 +598,9 @@ void Parser::parseAddressingModes() {
                                             substitution));
                                     foundLabelOrConstant = true;
                                 } catch (...) {
-                                    throw std::runtime_error(
-                                        "The offsetting mode for argument " +
-                                        operand + " is badly formulated");
+                                    fail(instruction->line,
+                                         "The offsetting mode for argument " +
+                                             operand + " is badly formulated");
                                 }
                             }
                         }
@@ -463,9 +608,9 @@ void Parser::parseAddressingModes() {
                 }
 
                 if (!foundLabelOrConstant) {
-                    throw std::runtime_error(
-                        "The addressing mode for argument " + operand +
-                        " is not correctly formulated.");
+                    fail(instruction->line,
+                         "The addressing mode for argument " + operand +
+                             " is not correctly formulated.");
                 }
             }
         }
@@ -473,20 +618,7 @@ void Parser::parseAddressingModes() {
 }
 
 bool Parser::isRegister(std::string val) {
-    if (val.starts_with("r")) {
-        if (val.length() > 3) {
-            return false;
-        }
-        int registerNum = std::stoi(val.substr(1));
-        if (registerNum < 16) {
-            return true;
-        }
-    } else if (val == "pc" || val == "sp" || val == "fp" || val == "fl" ||
-               val == "dp" || val == "ivt") {
-        return true;
-    }
-
-    return false;
+    return isGeneralRegister(val) || isSpecialRegister(val);
 }
 
 std::string Parser::addressingModeToString(AddressingMode mode) {
@@ -510,4 +642,5 @@ std::string Parser::addressingModeToString(AddressingMode mode) {
     case AddressingMode::Label:
         return "Label";
     }
+    return "Unknown";
 }

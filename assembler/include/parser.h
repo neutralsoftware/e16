@@ -10,6 +10,8 @@
 #ifndef PARSER_H
 #define PARSER_H
 
+#include <cstddef>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -17,10 +19,12 @@ enum class ExpressionType { Instruction, Label, Directive };
 
 class Expression {
   public:
-    Expression(ExpressionType type, const std::string &contents)
-        : type(type), content(contents) {}
+    Expression(ExpressionType type, const std::string &contents,
+               std::size_t line)
+        : type(type), content(contents), line(line) {}
     ExpressionType type;
     std::string content;
+    std::size_t line;
 
     virtual ~Expression() = default;
 };
@@ -40,7 +44,7 @@ enum class AddressingMode {
 struct InstructionOperand {
     AddressingMode mode;
     std::string base;
-    int offset;
+    int offset = 0;
     std::string offsetReg;
 };
 
@@ -48,9 +52,9 @@ class Instruction : public Expression {
   public:
     Instruction(const std::string &opcode,
                 const std::vector<std::string> &operands,
-                const std::string &contents)
-        : Expression(ExpressionType::Instruction, contents), opcode(opcode),
-          operands(operands) {}
+                const std::string &contents, std::size_t line)
+        : Expression(ExpressionType::Instruction, contents, line),
+          opcode(opcode), operands(operands) {}
 
     std::string opcode;
     std::vector<std::string> operands;
@@ -59,8 +63,8 @@ class Instruction : public Expression {
 
 class Label : public Expression {
   public:
-    explicit Label(const std::string &name)
-        : Expression(ExpressionType::Label, name + ":"), name(name) {}
+    explicit Label(const std::string &name, std::size_t line)
+        : Expression(ExpressionType::Label, name + ":", line), name(name) {}
 
     std::string name;
 };
@@ -69,8 +73,8 @@ class Directive : public Expression {
   public:
     Directive(const std::string &name,
               const std::vector<std::string> &arguments,
-              const std::string &contents)
-        : Expression(ExpressionType::Directive, contents), name(name),
+              const std::string &contents, std::size_t line)
+        : Expression(ExpressionType::Directive, contents, line), name(name),
           arguments(arguments) {}
 
     std::string name;
@@ -91,6 +95,9 @@ class Parser {
 
     static bool isRegister(std::string val);
     static std::string addressingModeToString(AddressingMode mode);
+
+  private:
+    [[noreturn]] void fail(std::size_t line, const std::string &message) const;
 };
 
 struct InstructionDefinition {
@@ -118,7 +125,9 @@ class Dictionary {
 
 namespace utils {
 std::vector<std::string> split(std::string str, char separator);
+std::vector<std::string> splitArguments(const std::string &str);
 std::string trim(std::string str);
+std::string stripComment(const std::string &str);
 int parseNumber(const std::string &s);
 } // namespace utils
 

@@ -10,6 +10,10 @@
 #include "parser.h"
 
 void Dictionary::registerAllInstructions() {
+    if (!instructions.empty()) {
+        return;
+    }
+
     // Data movem ent
     addInstruction(std::make_unique<InstructionDefinition>("nop", 0x0, 0));
     addInstruction(std::make_unique<InstructionDefinition>("mov", 0x1, 2));
@@ -89,11 +93,11 @@ void Dictionary::registerAllInstructions() {
     addInstruction(std::make_unique<InstructionDefinition>("enter", 0x72, 1));
     addInstruction(std::make_unique<InstructionDefinition>("leave", 0x73, 0));
     addInstruction(std::make_unique<InstructionDefinition>("push", 0x74, 1));
-    addInstruction(std::make_unique<InstructionDefinition>("pop", 0x74, 1));
-    addInstruction(std::make_unique<InstructionDefinition>("pushf", 0x75, 0));
-    addInstruction(std::make_unique<InstructionDefinition>("popf", 0x76, 0));
-    addInstruction(std::make_unique<InstructionDefinition>("pusha", 0x77, 0));
-    addInstruction(std::make_unique<InstructionDefinition>("popa", 0x78, 0));
+    addInstruction(std::make_unique<InstructionDefinition>("pop", 0x75, 1));
+    addInstruction(std::make_unique<InstructionDefinition>("pushf", 0x76, 0));
+    addInstruction(std::make_unique<InstructionDefinition>("popf", 0x77, 0));
+    addInstruction(std::make_unique<InstructionDefinition>("pusha", 0x78, 0));
+    addInstruction(std::make_unique<InstructionDefinition>("popa", 0x79, 0));
 
     // Interrupts & System
     addInstruction(std::make_unique<InstructionDefinition>("int", 0x80, 1));
