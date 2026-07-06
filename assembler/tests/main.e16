@@ -2,6 +2,16 @@
 .const HELLO_WORLD, 0x343
 main:
     clr r0
+addressingTest:
+	mov r0, r1
+	mov r0, 32
+	load r0, @0x200000
+	load r1, @r0
+	store @(0x000200 + r2), r3
+	load r0, @(sp - 4)
+	load r1, @(r0 + 43)
+	load r1, dp:0x40
+	load r0, #0x0A
 loop:
     inc r15
     jmp loop

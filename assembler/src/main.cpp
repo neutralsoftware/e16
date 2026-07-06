@@ -21,6 +21,7 @@ int main(int argc, char **argv) {
     Parser parser(buffer.str());
     parser.parse();
     parser.verifyIntegrity();
+    parser.parseAddressingModes();
     parser.printExpressions();
 
     return 0;

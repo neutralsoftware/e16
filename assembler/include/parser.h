@@ -25,6 +25,25 @@ class Expression {
     virtual ~Expression() = default;
 };
 
+enum class AddressingMode {
+    Immediate,
+    Register,
+    Absolute,
+    RegisterIndirect,
+    Indexed,
+    BasePlusOffset,
+    DirectPageOffset,
+    StackRelative,
+    Label
+};
+
+struct InstructionOperand {
+    AddressingMode mode;
+    std::string base;
+    int offset;
+    std::string offsetReg;
+};
+
 class Instruction : public Expression {
   public:
     Instruction(const std::string &opcode,
@@ -35,6 +54,7 @@ class Instruction : public Expression {
 
     std::string opcode;
     std::vector<std::string> operands;
+    std::vector<InstructionOperand> parsedOperands;
 };
 
 class Label : public Expression {
@@ -67,6 +87,10 @@ class Parser {
     void verifyIntegrity();
     void printExpressions();
     void verifySpecialRegisters(Instruction *instruction);
+    void parseAddressingModes();
+
+    static bool isRegister(std::string val);
+    static std::string addressingModeToString(AddressingMode mode);
 };
 
 struct InstructionDefinition {
