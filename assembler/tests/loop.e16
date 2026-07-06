@@ -1,0 +1,6 @@
+
+main:
+    clr r0
+loop:
+    inc r0
+    jmp loop 

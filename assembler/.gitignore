@@ -5,3 +5,4 @@ compile_commands.json
 e16asm
 Makefile
 build
+.cache
