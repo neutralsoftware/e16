@@ -1,7 +1,9 @@
 #include "compiler.h"
 
 #include <cctype>
+#include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <stdexcept>
 
 namespace {
@@ -9,10 +11,44 @@ namespace {
     throw std::runtime_error("line " + std::to_string(line) + ": " + message);
 }
 
+std::string decodeString(const std::string &literal, std::size_t line);
+
 bool isStringLiteral(const std::string &value) {
     return value.length() >= 2 &&
            ((value.front() == '"' && value.back() == '"') ||
             (value.front() == '\'' && value.back() == '\''));
+}
+
+std::string unquotePath(const std::string &value, std::size_t line) {
+    if (!isStringLiteral(value)) {
+        fail(line, "Expected a file path string literal.");
+    }
+    return decodeString(value, line);
+}
+
+std::filesystem::path resolveDataPath(const Directive &directive) {
+    std::filesystem::path path(unquotePath(directive.arguments[0],
+                                           directive.line));
+    if (path.is_absolute()) {
+        return path;
+    }
+    if (!directive.sourcePath.empty()) {
+        std::filesystem::path source(directive.sourcePath);
+        if (source.has_parent_path()) {
+            return source.parent_path() / path;
+        }
+    }
+    return std::filesystem::current_path() / path;
+}
+
+std::vector<std::uint8_t> readBinaryFile(const std::filesystem::path &path,
+                                         std::size_t line) {
+    std::ifstream input(path, std::ios::binary);
+    if (!input) {
+        fail(line, "Could not open binary file " + path.string() + ".");
+    }
+    return std::vector<std::uint8_t>(std::istreambuf_iterator<char>(input),
+                                     std::istreambuf_iterator<char>());
 }
 
 std::string decodeString(const std::string &literal, std::size_t line) {
@@ -377,6 +413,17 @@ std::size_t Compiler::directiveSize(const Directive &directive) const {
         return 0;
     }
 
+    auto resolve = [&](const std::string &value) -> int {
+        if (constants.contains(value)) {
+            return constants.at(value);
+        }
+        try {
+            return utils::parseNumber(value);
+        } catch (...) {
+            fail(directive.line, "Could not resolve " + value + ".");
+        }
+    };
+
     if (directive.name == ".string") {
         std::size_t size = 0;
         for (const std::string &argument : directive.arguments) {
@@ -403,6 +450,38 @@ std::size_t Compiler::directiveSize(const Directive &directive) const {
 
     if (directive.name == ".addr24") {
         return directive.arguments.size() * 3;
+    }
+
+    if (directive.name == ".bin") {
+        if (directive.arguments.empty() || directive.arguments.size() > 3) {
+            fail(directive.line,
+                 ".bin expects a file path and optional offset/count.");
+        }
+        std::vector<std::uint8_t> data =
+            readBinaryFile(resolveDataPath(directive), directive.line);
+        std::size_t offset = 0;
+        if (directive.arguments.size() >= 2) {
+            int parsed = resolve(directive.arguments[1]);
+            if (parsed < 0) {
+                fail(directive.line, ".bin offset cannot be negative.");
+            }
+            offset = static_cast<std::size_t>(parsed);
+        }
+        if (offset > data.size()) {
+            fail(directive.line, ".bin offset is past end of file.");
+        }
+        if (directive.arguments.size() == 3) {
+            int parsed = resolve(directive.arguments[2]);
+            if (parsed < 0) {
+                fail(directive.line, ".bin count cannot be negative.");
+            }
+            std::size_t count = static_cast<std::size_t>(parsed);
+            if (count > data.size() - offset) {
+                fail(directive.line, ".bin range exceeds file size.");
+            }
+            return count;
+        }
+        return data.size() - offset;
     }
 
     fail(directive.line, "Directive " + directive.name + " cannot emit data.");
@@ -601,6 +680,40 @@ void Compiler::emitDirective(const Directive &directive,
             emit24(bytes,
                    checkedAddress(resolve(argument), directive.line, argument));
         }
+        return;
+    }
+
+    if (directive.name == ".bin") {
+        if (directive.arguments.empty() || directive.arguments.size() > 3) {
+            fail(directive.line,
+                 ".bin expects a file path and optional offset/count.");
+        }
+        std::vector<std::uint8_t> data =
+            readBinaryFile(resolveDataPath(directive), directive.line);
+        std::size_t offset = 0;
+        if (directive.arguments.size() >= 2) {
+            int parsed = resolve(directive.arguments[1]);
+            if (parsed < 0) {
+                fail(directive.line, ".bin offset cannot be negative.");
+            }
+            offset = static_cast<std::size_t>(parsed);
+        }
+        if (offset > data.size()) {
+            fail(directive.line, ".bin offset is past end of file.");
+        }
+        std::size_t count = data.size() - offset;
+        if (directive.arguments.size() == 3) {
+            int parsed = resolve(directive.arguments[2]);
+            if (parsed < 0) {
+                fail(directive.line, ".bin count cannot be negative.");
+            }
+            count = static_cast<std::size_t>(parsed);
+            if (count > data.size() - offset) {
+                fail(directive.line, ".bin range exceeds file size.");
+            }
+        }
+        bytes.insert(bytes.end(), data.begin() + static_cast<std::ptrdiff_t>(offset),
+                     data.begin() + static_cast<std::ptrdiff_t>(offset + count));
         return;
     }
 

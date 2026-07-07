@@ -73,12 +73,14 @@ class Directive : public Expression {
   public:
     Directive(const std::string &name,
               const std::vector<std::string> &arguments,
-              const std::string &contents, std::size_t line)
+              const std::string &contents, std::size_t line,
+              const std::string &sourcePath = "")
         : Expression(ExpressionType::Directive, contents, line), name(name),
-          arguments(arguments) {}
+          arguments(arguments), sourcePath(sourcePath) {}
 
     std::string name;
     std::vector<std::string> arguments;
+    std::string sourcePath;
 };
 
 class Parser {

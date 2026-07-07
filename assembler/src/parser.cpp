@@ -438,7 +438,7 @@ void Parser::parseSource(const std::string &source, const std::string &path,
             }
 
             expressions.push_back(std::make_unique<Directive>(
-                name, arguments, std::string(trimmedLine), lineNumber));
+                name, arguments, std::string(trimmedLine), lineNumber, path));
         } else {
             std::string opcode;
 
@@ -471,7 +471,8 @@ void Parser::verifyIntegrity() {
             if (directive->name == ".const" || directive->name == ".constant" ||
                 directive->name == ".string" || directive->name == ".data" ||
                 directive->name == ".byte" || directive->name == ".word" ||
-                directive->name == ".addr24" || directive->name == ".include") {
+                directive->name == ".addr24" || directive->name == ".include" ||
+                directive->name == ".bin") {
                 continue;
             }
             fail(directive->line,
