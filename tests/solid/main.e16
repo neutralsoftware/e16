@@ -1,0 +1,20 @@
+.const VPU_CONTROL, 0xFF1000
+.const VPU_BACKDROP, 0xFF1008
+
+.const RED_COLOR, 0x7C00
+
+start:
+    ; Set the VPU backdrop color to red
+    mov r0, RED_COLOR
+    store @VPU_BACKDROP, r0
+
+    ; Enable the actual VPU
+    mov r0, 0x0003
+    store @VPU_CONTROL, r0
+    
+main:
+    wait
+    bra main
+
+
+
