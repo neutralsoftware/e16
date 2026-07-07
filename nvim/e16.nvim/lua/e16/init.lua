@@ -27,6 +27,23 @@ function M.setup(opts)
     python = "python3"
   end
   local server = opts.server or (plugin_root() .. "/server/e16_lsp.py")
+  local highlights = {
+    e16DataMovement = "#22D3EE",
+    e16Memory = "#60A5FA",
+    e16Arithmetic = "#FACC15",
+    e16Bitwise = "#E879F9",
+    e16Shift = "#4ADE80",
+    e16Compare = "#E5E7EB",
+    e16Branch = "#F87171",
+    e16CallStack = "#06B6D4",
+    e16InterruptSystem = "#EF4444",
+    e16Special = "#22C55E",
+    e16Helper = "#C084FC",
+  }
+
+  for name, color in pairs(highlights) do
+    vim.api.nvim_set_hl(0, "@lsp.type." .. name .. ".e16", { fg = color, bold = true })
+  end
 
   vim.api.nvim_create_autocmd("FileType", {
     pattern = "e16",

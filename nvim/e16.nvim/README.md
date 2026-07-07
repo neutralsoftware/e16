@@ -6,6 +6,7 @@ It provides:
 
 - `*.e16` filetype detection
 - syntax highlighting for instructions, registers, labels, constants, directives, strings, numbers, comments, and addressing punctuation
+- grouped instruction colors matching the disassembler palette: memory blue, branches red, arithmetic yellow, bitwise magenta, shifts green, data movement cyan, stack cyan, system red, special registers green
 - an LSP server for completions, hover, go-to-definition, document symbols, semantic tokens, and diagnostics
 
 ## Install with lazy.nvim

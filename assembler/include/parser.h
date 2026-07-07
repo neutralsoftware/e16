@@ -83,8 +83,9 @@ class Directive : public Expression {
 
 class Parser {
   public:
-    Parser(const std::string &input);
+    Parser(const std::string &input, const std::string &sourcePath = "");
     std::string input;
+    std::string sourcePath;
     std::vector<std::unique_ptr<Expression>> expressions;
 
     void parse();
@@ -97,6 +98,8 @@ class Parser {
     static std::string addressingModeToString(AddressingMode mode);
 
   private:
+    void parseSource(const std::string &source, const std::string &path,
+                     std::vector<std::string> &includeStack);
     [[noreturn]] void fail(std::size_t line, const std::string &message) const;
 };
 

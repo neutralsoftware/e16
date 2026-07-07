@@ -110,7 +110,7 @@ int main(int argc, char **argv) {
     buffer << file.rdbuf();
 
     try {
-        Parser parser(buffer.str());
+        Parser parser(buffer.str(), inputPath);
         parser.parse();
         parser.verifyIntegrity();
         parser.parseAddressingModes();

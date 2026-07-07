@@ -1,9 +1,13 @@
 #include <parser.h>
 
+#include <algorithm>
 #include <cctype>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace {
@@ -55,6 +59,142 @@ size_t findOffsetOperator(const std::string &val) {
     }
 
     return std::string::npos;
+}
+
+std::string unquote(const std::string &val) {
+    std::string trimmed = utils::trim(val);
+    if (trimmed.length() >= 2 &&
+        ((trimmed.front() == '"' && trimmed.back() == '"') ||
+         (trimmed.front() == '\'' && trimmed.back() == '\''))) {
+        return trimmed.substr(1, trimmed.length() - 2);
+    }
+
+    return trimmed;
+}
+
+std::filesystem::path includeBase(const std::string &path) {
+    if (path.empty()) {
+        return std::filesystem::current_path();
+    }
+
+    std::filesystem::path source(path);
+    if (source.has_parent_path()) {
+        return source.parent_path();
+    }
+
+    return std::filesystem::current_path();
+}
+
+std::string readTextFile(const std::filesystem::path &path) {
+    std::ifstream file(path);
+    if (!file) {
+        throw std::runtime_error("Could not open include file " +
+                                 path.string() + ".");
+    }
+
+    std::string contents;
+    std::string line;
+    while (std::getline(file, line)) {
+        contents += line;
+        contents += '\n';
+    }
+
+    return contents;
+}
+
+std::unordered_map<std::string, int>
+collectParserConstants(const std::vector<std::unique_ptr<Expression>> &expressions) {
+    std::unordered_map<std::string, int> constants;
+
+    for (const auto &expression : expressions) {
+        if (expression->type != ExpressionType::Directive) {
+            continue;
+        }
+
+        const auto *directive = dynamic_cast<Directive *>(expression.get());
+        if (directive->name != ".const" && directive->name != ".constant") {
+            continue;
+        }
+
+        if (directive->arguments.size() != 2) {
+            continue;
+        }
+
+        try {
+            constants[directive->arguments[0]] =
+                utils::parseNumber(directive->arguments[1]);
+        } catch (...) {
+        }
+    }
+
+    return constants;
+}
+
+bool parseConstTerm(const std::string &term,
+                    const std::unordered_map<std::string, int> &constants,
+                    int &value) {
+    std::string trimmed = utils::trim(term);
+    if (trimmed.empty()) {
+        return false;
+    }
+
+    if (constants.contains(trimmed)) {
+        value = constants.at(trimmed);
+        return true;
+    }
+
+    try {
+        value = utils::parseNumber(trimmed);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool resolveConstExpression(const std::string &text,
+                            const std::unordered_map<std::string, int> &constants,
+                            int &value) {
+    std::string expression = utils::trim(text);
+    if (expression.empty()) {
+        return false;
+    }
+
+    int total = 0;
+    int sign = 1;
+    std::string current;
+    bool sawTerm = false;
+
+    for (size_t i = 0; i <= expression.size(); i++) {
+        bool atEnd = i == expression.size();
+        char c = atEnd ? '\0' : expression[i];
+        bool split = atEnd || c == '+' || c == '-';
+
+        if (!split || (current.empty() && (c == '+' || c == '-'))) {
+            current += c;
+            continue;
+        }
+
+        int term = 0;
+        if (!parseConstTerm(current, constants, term)) {
+            return false;
+        }
+
+        total += sign * term;
+        sawTerm = true;
+        current.clear();
+        sign = c == '-' ? -1 : 1;
+    }
+
+    if (!sawTerm) {
+        return false;
+    }
+
+    value = total;
+    return true;
+}
+
+std::string normalizeNumber(int value) {
+    return std::to_string(value);
 }
 }
 
@@ -225,7 +365,8 @@ int utils::parseNumber(const std::string &s) {
     return value * sign;
 }
 
-Parser::Parser(const std::string &input) : input(input) {
+Parser::Parser(const std::string &input, const std::string &sourcePath)
+    : input(input), sourcePath(sourcePath) {
     Dictionary::registerAllInstructions();
 }
 
@@ -234,7 +375,14 @@ void Parser::fail(std::size_t line, const std::string &message) const {
 }
 
 void Parser::parse() {
-    const std::vector<std::string> lines = utils::split(input, '\n');
+    expressions.clear();
+    std::vector<std::string> includeStack;
+    parseSource(input, sourcePath, includeStack);
+}
+
+void Parser::parseSource(const std::string &source, const std::string &path,
+                         std::vector<std::string> &includeStack) {
+    const std::vector<std::string> lines = utils::split(source, '\n');
     for (size_t lineIndex = 0; lineIndex < lines.size(); lineIndex++) {
         std::size_t lineNumber = lineIndex + 1;
         std::string trimmedLine =
@@ -263,6 +411,31 @@ void Parser::parse() {
 
             std::vector<std::string> arguments =
                 utils::splitArguments(trimmedLine.substr(i));
+
+            if (name == ".include") {
+                if (arguments.size() != 1) {
+                    fail(lineNumber,
+                         ".include expects exactly one file path argument.");
+                }
+
+                std::filesystem::path includePath = unquote(arguments[0]);
+                if (includePath.is_relative()) {
+                    includePath = includeBase(path) / includePath;
+                }
+
+                includePath = std::filesystem::weakly_canonical(includePath);
+                std::string includeKey = includePath.string();
+                if (std::find(includeStack.begin(), includeStack.end(),
+                              includeKey) != includeStack.end()) {
+                    fail(lineNumber,
+                         "Recursive include detected for " + includeKey + ".");
+                }
+
+                includeStack.push_back(includeKey);
+                parseSource(readTextFile(includePath), includeKey, includeStack);
+                includeStack.pop_back();
+                continue;
+            }
 
             expressions.push_back(std::make_unique<Directive>(
                 name, arguments, std::string(trimmedLine), lineNumber));
@@ -298,7 +471,7 @@ void Parser::verifyIntegrity() {
             if (directive->name == ".const" || directive->name == ".constant" ||
                 directive->name == ".string" || directive->name == ".data" ||
                 directive->name == ".byte" || directive->name == ".word" ||
-                directive->name == ".addr24") {
+                directive->name == ".addr24" || directive->name == ".include") {
                 continue;
             }
             fail(directive->line,
@@ -435,11 +608,22 @@ void Parser::verifySpecialRegisters(Instruction *instruction) {
 }
 
 void Parser::parseAddressingModes() {
+    const auto constants = collectParserConstants(expressions);
+
     for (auto &expression : expressions) {
         if (expression->type == ExpressionType::Instruction) {
             auto *instruction = dynamic_cast<Instruction *>(expression.get());
             instruction->parsedOperands.clear();
             for (std::string operand : instruction->operands) {
+                int resolvedExpression = 0;
+                if (resolveConstExpression(operand, constants,
+                                           resolvedExpression)) {
+                    instruction->parsedOperands.push_back(InstructionOperand(
+                        AddressingMode::Immediate,
+                        normalizeNumber(resolvedExpression)));
+                    continue;
+                }
+
                 try {
                     int val = utils::parseNumber(operand);
                     (void)val;
@@ -486,6 +670,21 @@ void Parser::parseAddressingModes() {
                 }
 
                 if (operand[0] == '@') {
+                    if (operand.length() > 2 && operand[1] == '(' &&
+                        operand.back() == ')') {
+                        std::string inner = utils::trim(
+                            operand.substr(2, operand.length() - 3));
+                        int resolvedAddress = 0;
+                        if (resolveConstExpression(inner, constants,
+                                                   resolvedAddress)) {
+                            instruction->parsedOperands.push_back(
+                                InstructionOperand(
+                                    AddressingMode::Absolute,
+                                    normalizeNumber(resolvedAddress)));
+                            continue;
+                        }
+                    }
+
                     try {
                         int val = utils::parseNumber(operand.substr(1));
                         (void)val;

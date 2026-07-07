@@ -114,6 +114,7 @@ REGISTERS = {
 DIRECTIVES = {
     ".const",
     ".constant",
+    ".include",
     ".string",
     ".data",
     ".byte",
@@ -145,12 +146,105 @@ TOKEN_TYPES = [
     "regexp",
     "operator",
     "decorator",
+    "e16DataMovement",
+    "e16Memory",
+    "e16Arithmetic",
+    "e16Bitwise",
+    "e16Shift",
+    "e16Compare",
+    "e16Branch",
+    "e16CallStack",
+    "e16InterruptSystem",
+    "e16Special",
+    "e16Helper",
 ]
 
 TOKEN_INDEX = {name: index for index, name in enumerate(TOKEN_TYPES)}
 DOCS = {}
 SHUTDOWN = False
 IDENT = re.compile(r"[A-Za-z_.][A-Za-z0-9_.]*")
+GROUPS = {
+    "nop": "e16DataMovement",
+    "mov": "e16DataMovement",
+    "movb": "e16DataMovement",
+    "movw": "e16DataMovement",
+    "clr": "e16DataMovement",
+    "swap": "e16DataMovement",
+    "xchg": "e16DataMovement",
+    "load": "e16Memory",
+    "loadb": "e16Memory",
+    "loadw": "e16Memory",
+    "loadsb": "e16Memory",
+    "store": "e16Memory",
+    "storeb": "e16Memory",
+    "storew": "e16Memory",
+    "addr": "e16Memory",
+    "add": "e16Arithmetic",
+    "addwc": "e16Arithmetic",
+    "sub": "e16Arithmetic",
+    "subwc": "e16Arithmetic",
+    "inc": "e16Arithmetic",
+    "dec": "e16Arithmetic",
+    "neg": "e16Arithmetic",
+    "mul": "e16Arithmetic",
+    "muls": "e16Arithmetic",
+    "div": "e16Arithmetic",
+    "divs": "e16Arithmetic",
+    "mod": "e16Arithmetic",
+    "and": "e16Bitwise",
+    "or": "e16Bitwise",
+    "xor": "e16Bitwise",
+    "not": "e16Bitwise",
+    "test": "e16Bitwise",
+    "setb": "e16Bitwise",
+    "clearb": "e16Bitwise",
+    "toggleb": "e16Bitwise",
+    "shl": "e16Shift",
+    "shr": "e16Shift",
+    "sar": "e16Shift",
+    "rol": "e16Shift",
+    "ror": "e16Shift",
+    "rcl": "e16Shift",
+    "rcr": "e16Shift",
+    "cmp": "e16Compare",
+    "jmp": "e16Branch",
+    "bra": "e16Branch",
+    "beq": "e16Branch",
+    "bne": "e16Branch",
+    "bcs": "e16Branch",
+    "bcc": "e16Branch",
+    "bmi": "e16Branch",
+    "bpl": "e16Branch",
+    "bvs": "e16Branch",
+    "bvc": "e16Branch",
+    "bgt": "e16Branch",
+    "bge": "e16Branch",
+    "blt": "e16Branch",
+    "ble": "e16Branch",
+    "bhi": "e16Branch",
+    "bls": "e16Branch",
+    "call": "e16CallStack",
+    "ret": "e16CallStack",
+    "enter": "e16CallStack",
+    "leave": "e16CallStack",
+    "push": "e16CallStack",
+    "pop": "e16CallStack",
+    "pushf": "e16CallStack",
+    "popf": "e16CallStack",
+    "pusha": "e16CallStack",
+    "popa": "e16CallStack",
+    "int": "e16InterruptSystem",
+    "iret": "e16InterruptSystem",
+    "ei": "e16InterruptSystem",
+    "di": "e16InterruptSystem",
+    "wait": "e16InterruptSystem",
+    "halt": "e16InterruptSystem",
+    "reset": "e16InterruptSystem",
+    "trap": "e16InterruptSystem",
+    "get": "e16Special",
+    "set": "e16Special",
+    "dma": "e16Helper",
+}
 
 
 def read_message():
@@ -368,7 +462,8 @@ def completion_items(uri):
     labels, constants, symbols, diagnostics = parse_document(text)
     items = []
     for name, data in sorted(INSTRUCTIONS.items()):
-        items.append({"label": name, "kind": 14, "detail": "opcode " + hex(data[0]) + ", operands " + str(data[1])})
+        group = GROUPS.get(name, "e16Helper")[3:]
+        items.append({"label": name, "kind": 14, "detail": group + ", opcode " + hex(data[0]) + ", operands " + str(data[1])})
     for name in sorted(REGISTERS):
         items.append({"label": name, "kind": 6, "detail": "E16 register"})
     for name in sorted(DIRECTIVES):
@@ -386,7 +481,7 @@ def hover(uri, position):
     labels, constants, symbols, diagnostics = parse_document(text)
     if word in INSTRUCTIONS:
         opcode, count = INSTRUCTIONS[word]
-        value = word + "\nopcode " + hex(opcode) + "\noperands " + str(count)
+        value = word + "\n" + GROUPS.get(word, "e16Helper")[3:] + "\nopcode " + hex(opcode) + "\noperands " + str(count)
     elif word in REGISTERS:
         value = word + "\nE16 register"
     elif word in labels:
@@ -449,7 +544,7 @@ def semantic_tokens(uri):
         elif directive_match:
             found.append((directive_match.start(1), len(directive_match.group(1)), "macro"))
         elif instr_match and instr_match.group(1) in INSTRUCTIONS:
-            found.append((instr_match.start(1), len(instr_match.group(1)), "keyword"))
+            found.append((instr_match.start(1), len(instr_match.group(1)), GROUPS[instr_match.group(1)]))
         for match in re.finditer(r"\b(r[0-9]+|pc|sp|fp|fl|dp|ivt)\b", code):
             found.append((match.start(), len(match.group(0)), "parameter"))
         for match in re.finditer(r"[-+]?(0x[0-9A-Fa-f]+|0b[01]+|0o[0-7]+|\b[0-9]+\b)", code):

@@ -372,7 +372,8 @@ void Compiler::layout() {
 }
 
 std::size_t Compiler::directiveSize(const Directive &directive) const {
-    if (directive.name == ".const" || directive.name == ".constant") {
+    if (directive.name == ".const" || directive.name == ".constant" ||
+        directive.name == ".include") {
         return 0;
     }
 
@@ -561,7 +562,8 @@ void Compiler::emitDirective(const Directive &directive,
         }
     };
 
-    if (directive.name == ".const" || directive.name == ".constant") {
+    if (directive.name == ".const" || directive.name == ".constant" ||
+        directive.name == ".include") {
         return;
     }
 
