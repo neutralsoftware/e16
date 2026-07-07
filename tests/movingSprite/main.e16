@@ -1,0 +1,135 @@
+.const FLAME_CONTROL, 0xFF1000
+.const FLAME_BACKDROP, 0xFF1008
+.const SPRITECTRL_BASE, 0xFF1200
+.const INPUT_PAD0, 0xFF3000
+
+.const FLAME_ENABLE, 0x01
+.const DISPLAY_ENABLE, 0x02
+.const SPRITE_ENABLE, 0x08
+
+.const VRAM_SPR_TILES, 0x48000
+
+.const BUTTON_RIGHT, 0x01
+.const BUTTON_LEFT, 0x02
+.const BUTTON_DOWN, 0x04
+.const BUTTON_UP, 0x08
+
+start:
+    ; Black backdrop
+    clr r0
+    store @FLAME_BACKDROP, r0
+
+    mov r0, 0x7FFF
+    store @0xFF1822, r0
+
+    set dp, VRAM_SPR_TILES
+    mov r0, 0x11
+    clr r1
+    mov r2, 32
+
+fill_tile:
+    storeb @r1, r0
+    inc r1
+    dec r2
+    bne fill_tile
+
+    mov r0, 120
+    storeb @(SPRITECTRL_BASE + 0), r0
+    clr r0
+    storeb @(SPRITECTRL_BASE + 1), r0
+
+    mov r0, 80
+    storeb @(SPRITECTRL_BASE + 2), r0
+    clr r0
+    storeb @(SPRITECTRL_BASE + 3), r0
+
+    clr r0
+    storeb @(SPRITECTRL_BASE + 4), r0
+    storeb @(SPRITECTRL_BASE + 5), r0
+
+    mov r0, 0x01
+    storeb @(SPRITECTRL_BASE + 6), r0
+
+    mov r0, 0b00000100
+    storeb @(SPRITECTRL_BASE + 7), r0
+
+    mov r0, 0x000B
+    store @FLAME_CONTROL, r0
+
+main_loop:
+    wait
+
+    load r0, @INPUT_PAD0
+
+    test r0, BUTTON_RIGHT
+    bne move_right
+
+    test r0, BUTTON_LEFT
+    bne move_left
+
+    test r0, BUTTON_DOWN
+    bne move_down
+
+    test r0, BUTTON_UP
+    bne move_up
+
+    bra update_sprite
+
+move_right:
+    load r1, @player_x
+    inc r1
+    
+    bra check_bounds
+
+move_left:
+    load r1, @player_x
+    dec r1
+    
+    bra check_bounds
+
+move_down:
+    load r2, @player_y
+    inc r2
+    
+    bra check_bounds
+
+move_up:
+    load r2, @player_y
+    dec r2
+
+    bra check_bounds
+
+check_bounds:
+    cmp r1, 0
+    blt main_loop
+
+    cmp r1, 312      ; 320 - 8
+    bgt main_loop
+
+    cmp r2, 0
+    blt main_loop
+
+    cmp r2, 172      ; 180 - 8
+    bgt main_loop
+
+    bra save_position
+
+
+save_position:
+    store @player_x, r1
+    store @player_y, r2
+
+update_sprite:
+    load r1, @player_x
+    storeb @(SPRITECTRL_BASE + 0), r1
+
+    load r2, @player_y
+    storeb @(SPRITECTRL_BASE + 2), r2
+
+    bra main_loop
+
+player_x:
+    .word 120
+
+player_y:
+    .word 80

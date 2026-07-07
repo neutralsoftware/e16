@@ -503,7 +503,7 @@ StopReason Cpu::execBinary(std::uint8_t opcode) {
         memoryForm = true;
         memory = memoryAddress(selector, true, dst);
         source = mem.read16(memory);
-    } else if (selector <= 0x0F) {
+    } else if (opcode != 0x06) {
         dst = selector >> 4;
         source = readReg(selector & 0x0F);
     } else if (selector >= 0x02 && selector <= 0x07) {

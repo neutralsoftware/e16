@@ -209,7 +209,7 @@ DecodedInstruction Disassembler::decode(std::uint32_t address) const {
                     bytes(address, static_cast<std::uint8_t>(2 + size)),
                     std::string(name) + " " + reg(regId) + ", " + mem, true};
         }
-        if (selector <= 0x0F) {
+        if (opcode != 0x06) {
             return {address, 2, bytes(address, 2),
                     std::string(name) + " " + reg(selector >> 4) + ", " +
                         reg(selector & 0x0F),
