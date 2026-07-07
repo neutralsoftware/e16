@@ -16,3 +16,4 @@ loop:
     inc r15
     jmp loop
     mov r0, HELLO_WORLD
+
