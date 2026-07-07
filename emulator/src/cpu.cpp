@@ -34,6 +34,8 @@ void Cpu::reset(std::uint32_t pc) {
     waitState = false;
     interruptPending = false;
     pendingInterrupt = 0;
+    instructionPc = s.pc;
+    faultPc = s.pc;
     faultText.clear();
 }
 
@@ -55,6 +57,7 @@ StopReason Cpu::step() {
         }
     }
 
+    instructionPc = s.pc;
     std::uint8_t opcode = fetch8();
 
     if (opcode == 0x00) {
@@ -64,11 +67,17 @@ StopReason Cpu::step() {
         std::uint8_t mode = fetch8();
         std::uint8_t reg = 0;
         if (opcode == 0x17) {
+            if (mode != 0x02) {
+                return fault("addr expects absolute addressing mode");
+            }
             reg = fetch8();
             std::uint32_t address = fetch24();
             s.dp = address & 0xFF0000;
             writeReg(reg, low16(address));
             return StopReason::None;
+        }
+        if (mode < 0x02 || mode > 0x07) {
+            return fault("bad memory addressing mode " + hex(mode, 2));
         }
         std::uint32_t address = memoryAddress(mode, true, reg);
         if (opcode >= 0x10 && opcode <= 0x13) {
@@ -182,12 +191,18 @@ StopReason Cpu::step() {
     if (opcode == 0x90) {
         std::uint8_t reg = fetch8();
         std::uint8_t special = fetch8();
+        if (special < 0x10 || special > 0x15) {
+            return fault("bad special register " + hex(special, 2));
+        }
         writeReg(reg, low16(readSpecial(special)));
         return StopReason::None;
     }
     if (opcode == 0x91) {
         std::uint8_t mode = fetch8();
         std::uint8_t special = fetch8();
+        if (special < 0x10 || special > 0x15) {
+            return fault("bad special register " + hex(special, 2));
+        }
         if (mode == 0x01) {
             writeSpecial(special, readReg(fetch8()));
             return StopReason::None;
@@ -228,6 +243,10 @@ bool Cpu::waiting() const {
 
 const std::string &Cpu::fault() const {
     return faultText;
+}
+
+std::uint32_t Cpu::faultAddress() const {
+    return faultPc;
 }
 
 CpuState &Cpu::state() {
@@ -426,6 +445,7 @@ StopReason Cpu::interrupt(std::uint8_t number) {
 }
 
 StopReason Cpu::fault(const std::string &message) {
+    faultPc = instructionPc;
     faultText = message;
     haltState = true;
     return StopReason::Fault;

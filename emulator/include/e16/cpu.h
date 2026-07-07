@@ -40,6 +40,7 @@ class Cpu {
     bool halted() const;
     bool waiting() const;
     const std::string &fault() const;
+    std::uint32_t faultAddress() const;
     CpuState &state();
     const CpuState &state() const;
 
@@ -50,6 +51,8 @@ class Cpu {
     bool waitState = false;
     bool interruptPending = false;
     std::uint8_t pendingInterrupt = 0;
+    std::uint32_t instructionPc = DefaultLoadAddress;
+    std::uint32_t faultPc = DefaultLoadAddress;
     std::string faultText;
 
     std::uint8_t fetch8();

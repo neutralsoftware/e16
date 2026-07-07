@@ -1,5 +1,7 @@
 #include "e16/emulator.h"
 
+#include "e16/disassembler.h"
+
 #include <chrono>
 #include <iostream>
 #include <thread>
@@ -67,7 +69,14 @@ void Emulator::runFrame() {
         }
         StopReason reason = cpu.step();
         if (reason == StopReason::Fault) {
-            std::cerr << "CPU fault: " << cpu.fault() << "\n";
+            Disassembler disassembler(memory);
+            DecodedInstruction decoded = disassembler.decode(cpu.faultAddress());
+            std::cerr << "Runtime error at " << hex(cpu.faultAddress(), 6)
+                      << ": " << cpu.fault() << "\n"
+                      << decoded.text << "\n";
+            if (debugger.enabled) {
+                debugger.repl();
+            }
             break;
         }
         if (reason == StopReason::Trap) {
@@ -75,7 +84,8 @@ void Emulator::runFrame() {
                 debugger.repl();
                 continue;
             }
-            std::cerr << "CPU trap at " << hex(cpu.state().pc, 6) << "\n";
+            std::cerr << "Runtime trap at " << hex(mask24(cpu.state().pc - 1), 6)
+                      << "\n";
             break;
         }
         if (reason == StopReason::Halted || reason == StopReason::Waiting) {
