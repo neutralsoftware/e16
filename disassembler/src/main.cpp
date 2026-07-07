@@ -6,7 +6,6 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <limits>
 #include <map>
 #include <optional>
 #include <sstream>
@@ -781,66 +780,39 @@ std::vector<Candidate> candidatesAt(
 std::vector<DecodedLine> decodeProgram(
     const std::vector<std::uint8_t> &bytes, std::uint32_t baseAddress) {
     const auto specs = makeSpecs();
+    std::vector<DecodedLine> lines;
 
-    if (bytes.empty()) {
-        return {};
-    }
-
-    constexpr int negativeInfinity = std::numeric_limits<int>::min() / 4;
-    std::vector<int> scores(bytes.size() + 1, negativeInfinity);
-    std::vector<Candidate> choices(bytes.size());
-    scores[bytes.size()] = 0;
-
-    for (std::size_t reverse = bytes.size(); reverse-- > 0;) {
-        auto candidates = candidatesAt(bytes, reverse, baseAddress, specs);
-        int bestScore = negativeInfinity;
+    for (std::size_t offset = 0; offset < bytes.size();) {
+        std::vector<Candidate> candidates =
+            candidatesAt(bytes, offset, baseAddress, specs);
         Candidate best;
+        bool found = false;
 
         for (const Candidate &candidate : candidates) {
-            if (candidate.size == 0 || reverse + candidate.size > bytes.size()) {
+            if (candidate.size == 0 || offset + candidate.size > bytes.size()) {
                 continue;
             }
 
-            int continuation = scores[reverse + candidate.size];
-            if (continuation == negativeInfinity) {
-                continue;
-            }
-
-            int total = candidate.score + continuation;
-            bool better = total > bestScore;
-            bool tie = total == bestScore && candidate.size > best.size;
+            bool better = !found || candidate.score > best.score;
+            bool tie = found && candidate.score == best.score &&
+                       candidate.size > best.size;
 
             if (better || tie) {
-                bestScore = total;
                 best = candidate;
+                found = true;
             }
         }
 
-        if (bestScore == negativeInfinity) {
+        if (!found) {
             best = Candidate{
-                1, -100,
-                makeDataByte(static_cast<std::uint32_t>((baseAddress + reverse) &
-                                                        0xFFFFFF),
-                             bytes[reverse], "decode error")};
-            bestScore = best.score + scores[reverse + 1];
-        }
-
-        scores[reverse] = bestScore;
-        choices[reverse] = best;
-    }
-
-    std::vector<DecodedLine> lines;
-    for (std::size_t offset = 0; offset < bytes.size();) {
-        Candidate candidate = choices[offset];
-        if (candidate.size == 0) {
-            candidate = Candidate{
                 1, -100,
                 makeDataByte(static_cast<std::uint32_t>((baseAddress + offset) &
                                                         0xFFFFFF),
                              bytes[offset], "decode error")};
         }
-        lines.push_back(candidate.line);
-        offset += candidate.size;
+
+        lines.push_back(best.line);
+        offset += best.size;
     }
 
     return lines;
