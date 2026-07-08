@@ -1,0 +1,31 @@
+
+.const APU_CONTROL, 0xFF2000
+.const APU_MASTER_VOL, 0xFF2004
+.const APU_CH0_BASE, 0xFF2100
+.const CH_CONTROL, 0x00
+.const CH_FREQ, 0x04
+.const CH_VOLUME, 0x06
+.const CH_PARAM, 0x0E
+
+start:
+    mov r0, 0x0003
+    storew @APU_CONTROL, r0
+
+    mov r0, 0xFFFF
+    storew @APU_MASTER_VOL, r0
+
+    mov r0, 440
+    storew @(APU_CH0_BASE + CH_FREQ), r0
+
+    mov r0, 0x0202
+    storew @(APU_CH0_BASE + CH_VOLUME), r0
+
+    mov r0, 2
+    storew @(APU_CH0_BASE + CH_PARAM), r0
+
+    mov r0, 0x0003
+    storew @(APU_CH0_BASE + CH_CONTROL), r0
+
+main:
+    wait
+    bra main

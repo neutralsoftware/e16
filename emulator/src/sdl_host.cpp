@@ -30,8 +30,9 @@ SdlHost::~SdlHost() {
     SDL_Quit();
 }
 
-bool SdlHost::open(int scale) {
-    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
+bool SdlHost::open(int scale, Apu &apu) {
+    apuDevice = &apu;
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD | SDL_INIT_AUDIO)) {
         errorText = SDL_GetError();
         return false;
     }
@@ -52,6 +53,21 @@ bool SdlHost::open(int scale) {
                                 SDL_TEXTUREACCESS_STREAMING, ScreenWidth,
                                 ScreenHeight);
     if (!texture) {
+        errorText = SDL_GetError();
+        return false;
+    }
+    SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
+    SDL_AudioSpec spec{};
+    spec.format = SDL_AUDIO_F32;
+    spec.channels = 2;
+    spec.freq = ApuSampleRate;
+    audio = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec,
+                                      audioCallback, this);
+    if (!audio) {
+        errorText = SDL_GetError();
+        return false;
+    }
+    if (!SDL_ResumeAudioStreamDevice(audio)) {
         errorText = SDL_GetError();
         return false;
     }
@@ -125,6 +141,10 @@ const std::string &SdlHost::error() const {
 }
 
 void SdlHost::close() {
+    if (audio) {
+        SDL_DestroyAudioStream(audio);
+        audio = nullptr;
+    }
     if (texture) {
         SDL_DestroyTexture(texture);
         texture = nullptr;
@@ -137,6 +157,25 @@ void SdlHost::close() {
         SDL_DestroyWindow(window);
         window = nullptr;
     }
+    apuDevice = nullptr;
+}
+
+void SdlHost::audioCallback(void *userdata, SDL_AudioStream *stream,
+                            int additionalAmount, int totalAmount) {
+    (void)totalAmount;
+    auto *host = static_cast<SdlHost *>(userdata);
+    if (!host || !host->apuDevice || additionalAmount <= 0) {
+        return;
+    }
+    int frames = additionalAmount / static_cast<int>(sizeof(float) * 2);
+    if (frames <= 0) {
+        return;
+    }
+    host->audioBuffer.resize(static_cast<std::size_t>(frames) * 2);
+    host->apuDevice->mix(host->audioBuffer.data(), frames);
+    SDL_PutAudioStreamData(
+        stream, host->audioBuffer.data(),
+        static_cast<int>(host->audioBuffer.size() * sizeof(float)));
 }
 
 }

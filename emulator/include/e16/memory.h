@@ -1,6 +1,7 @@
 #ifndef E16_MEMORY_H
 #define E16_MEMORY_H
 
+#include "e16/apu.h"
 #include "e16/common.h"
 #include "e16/flame.h"
 
@@ -12,7 +13,7 @@ namespace e16 {
 
 class Memory {
   public:
-    explicit Memory(Flame &flame);
+    explicit Memory(Flame &flame, Apu &apu);
 
     void reset();
     void load(std::uint32_t address, const std::vector<std::uint8_t> &bytes);
@@ -29,6 +30,7 @@ class Memory {
 
   private:
     Flame &flameDevice;
+    Apu &apuDevice;
     std::vector<std::uint8_t> bytes;
     std::array<std::uint8_t, 0x100> dma{};
 

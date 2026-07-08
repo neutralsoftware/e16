@@ -10,18 +10,19 @@
 namespace e16 {
 
 Emulator::Emulator(EmulatorOptions options)
-    : options(std::move(options)), flame(), memory(flame), cpu(memory),
-      debugger(cpu, memory, flame) {
+    : options(std::move(options)), flame(), apu(), memory(flame, apu),
+      cpu(memory), debugger(cpu, memory, flame) {
     debugger.enabled = this->options.debug;
 }
 
 int Emulator::run() {
     memory.reset();
     flame.reset();
+    apu.reset();
     memory.load(options.loadAddress, readFile(options.programPath));
     cpu.reset(options.loadAddress);
 
-    if (!sdl.open(options.scale)) {
+    if (!sdl.open(options.scale, apu)) {
         std::cerr << "SDL: " << sdl.error() << "\n";
         return 1;
     }
@@ -42,8 +43,11 @@ int Emulator::run() {
 
         runFrame();
         flame.renderFrame();
+        apu.stepFrame();
         if (flame.consumeVblankInterrupt()) {
             cpu.requestInterrupt(1);
+        } else if (apu.consumeInterrupt()) {
+            cpu.requestInterrupt(2);
         } else {
             cpu.wake();
         }

@@ -1,6 +1,7 @@
 #ifndef E16_EMULATOR_H
 #define E16_EMULATOR_H
 
+#include "e16/apu.h"
 #include "e16/cpu.h"
 #include "e16/debugger.h"
 #include "e16/flame.h"
@@ -27,6 +28,7 @@ class Emulator {
   private:
     EmulatorOptions options;
     Flame flame;
+    Apu apu;
     Memory memory;
     Cpu cpu;
     Debugger debugger;

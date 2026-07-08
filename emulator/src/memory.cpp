@@ -18,7 +18,8 @@ bool isBackedMemory(std::uint32_t address) {
 }
 }
 
-Memory::Memory(Flame &flame) : flameDevice(flame), bytes(MemorySize, 0) {}
+Memory::Memory(Flame &flame, Apu &apu)
+    : flameDevice(flame), apuDevice(apu), bytes(MemorySize, 0) {}
 
 void Memory::reset() {
     std::fill(bytes.begin(), bytes.end(), 0);
@@ -41,6 +42,9 @@ std::uint8_t Memory::read8(std::uint32_t address) const {
     if (inRange(address, FlameVramBase, FlameVramEnd)) {
         return flameDevice.readVram(address);
     }
+    if (inRange(address, AudioRamBase, AudioRamEnd)) {
+        return apuDevice.readAudioRam(address);
+    }
     if (inRange(address, DmaBase, DmaEnd)) {
         return readDma(address);
     }
@@ -48,7 +52,7 @@ std::uint8_t Memory::read8(std::uint32_t address) const {
         return flameDevice.readMmio(address);
     }
     if (inRange(address, ApuBase, ApuEnd)) {
-        return 0;
+        return apuDevice.readMmio(address);
     }
     if (inRange(address, InputBase, InputEnd)) {
         return readInput(address);
@@ -79,6 +83,10 @@ void Memory::write8(std::uint32_t address, std::uint8_t value) {
         flameDevice.writeVram(address, value);
         return;
     }
+    if (inRange(address, AudioRamBase, AudioRamEnd)) {
+        apuDevice.writeAudioRam(address, value);
+        return;
+    }
     if (inRange(address, DmaBase, DmaEnd)) {
         writeDma(address, value);
         return;
@@ -88,6 +96,7 @@ void Memory::write8(std::uint32_t address, std::uint8_t value) {
         return;
     }
     if (inRange(address, ApuBase, ApuEnd)) {
+        apuDevice.writeMmio(address, value);
         return;
     }
     if (inRange(address, InputBase, InputEnd)) {
