@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -49,16 +50,6 @@ bool isIdentifier(const std::string &val) {
     }
 
     return true;
-}
-
-size_t findOffsetOperator(const std::string &val) {
-    for (size_t i = 1; i < val.size(); i++) {
-        if (val[i] == '+' || val[i] == '-') {
-            return i;
-        }
-    }
-
-    return std::string::npos;
 }
 
 std::string unquote(const std::string &val) {
@@ -121,8 +112,11 @@ collectParserConstants(const std::vector<std::unique_ptr<Expression>> &expressio
         }
 
         try {
-            constants[directive->arguments[0]] =
-                utils::parseNumber(directive->arguments[1]);
+            int value = 0;
+            if (utils::evaluateExpression(directive->arguments[1], constants,
+                                          value)) {
+                constants[directive->arguments[0]] = value;
+            }
         } catch (...) {
         }
     }
@@ -130,71 +124,115 @@ collectParserConstants(const std::vector<std::unique_ptr<Expression>> &expressio
     return constants;
 }
 
-bool parseConstTerm(const std::string &term,
-                    const std::unordered_map<std::string, int> &constants,
-                    int &value) {
-    std::string trimmed = utils::trim(term);
-    if (trimmed.empty()) {
-        return false;
-    }
-
-    if (constants.contains(trimmed)) {
-        value = constants.at(trimmed);
-        return true;
-    }
-
-    try {
-        value = utils::parseNumber(trimmed);
-        return true;
-    } catch (...) {
-        return false;
-    }
-}
-
 bool resolveConstExpression(const std::string &text,
                             const std::unordered_map<std::string, int> &constants,
                             int &value) {
-    std::string expression = utils::trim(text);
-    if (expression.empty()) {
-        return false;
-    }
-
-    int total = 0;
-    int sign = 1;
-    std::string current;
-    bool sawTerm = false;
-
-    for (size_t i = 0; i <= expression.size(); i++) {
-        bool atEnd = i == expression.size();
-        char c = atEnd ? '\0' : expression[i];
-        bool split = atEnd || c == '+' || c == '-';
-
-        if (!split || (current.empty() && (c == '+' || c == '-'))) {
-            current += c;
-            continue;
-        }
-
-        int term = 0;
-        if (!parseConstTerm(current, constants, term)) {
-            return false;
-        }
-
-        total += sign * term;
-        sawTerm = true;
-        current.clear();
-        sign = c == '-' ? -1 : 1;
-    }
-
-    if (!sawTerm) {
-        return false;
-    }
-
-    value = total;
-    return true;
+    return utils::evaluateExpression(text, constants, value);
 }
 
 std::string normalizeNumber(int value) {
     return std::to_string(value);
+}
+
+bool isExpressionCandidate(const std::string &value) {
+    return value.find_first_of("+-*/%<>&^|~()") != std::string::npos;
+}
+
+size_t findTopLevelOffsetOperator(const std::string &val) {
+    int parenDepth = 0;
+    for (size_t i = 0; i < val.size(); i++) {
+        if (val[i] == '(') {
+            parenDepth++;
+            continue;
+        }
+        if (val[i] == ')') {
+            if (parenDepth > 0) {
+                parenDepth--;
+            }
+            continue;
+        }
+        if (parenDepth != 0 || (val[i] != '+' && val[i] != '-')) {
+            continue;
+        }
+        if (i == 0) {
+            continue;
+        }
+        char previous = val[i - 1];
+        if (previous == '<' || previous == '>' || previous == '&' ||
+            previous == '^' || previous == '|' || previous == '*' ||
+            previous == '/' || previous == '%' || previous == '+' ||
+            previous == '-') {
+            continue;
+        }
+        return i;
+    }
+
+    return std::string::npos;
+}
+
+std::string replaceMacroArguments(
+    const std::string &line,
+    const std::unordered_map<std::string, std::string> &arguments) {
+    std::string result;
+    bool inString = false;
+    bool escaped = false;
+    char quote = '\0';
+
+    for (size_t i = 0; i < line.length();) {
+        char c = line[i];
+
+        if (escaped) {
+            result += c;
+            escaped = false;
+            i++;
+            continue;
+        }
+
+        if (inString && c == '\\') {
+            result += c;
+            escaped = true;
+            i++;
+            continue;
+        }
+
+        if ((c == '"' || c == '\'') && !inString) {
+            inString = true;
+            quote = c;
+            result += c;
+            i++;
+            continue;
+        }
+
+        if (inString && c == quote) {
+            inString = false;
+            result += c;
+            i++;
+            continue;
+        }
+
+        if (!inString &&
+            (std::isalpha(static_cast<unsigned char>(c)) || c == '_' ||
+             c == '.')) {
+            size_t start = i;
+            i++;
+            while (i < line.length()) {
+                unsigned char ch = static_cast<unsigned char>(line[i]);
+                if (!std::isalnum(ch) && line[i] != '_' && line[i] != '.') {
+                    break;
+                }
+                i++;
+            }
+            std::string name = line.substr(start, i - start);
+            auto found = arguments.find(name);
+            result += found == arguments.end() ? name : found->second;
+            continue;
+        }
+
+        result += c;
+        i++;
+    }
+
+    return result;
 }
 }
 
@@ -365,6 +403,239 @@ int utils::parseNumber(const std::string &s) {
     return value * sign;
 }
 
+namespace {
+enum class ExprTokenType { Number, Identifier, Operator, LeftParen, RightParen, End };
+
+struct ExprToken {
+    ExprTokenType type = ExprTokenType::End;
+    std::string text;
+};
+
+std::vector<ExprToken> tokenizeExpression(const std::string &text) {
+    std::vector<ExprToken> tokens;
+    for (std::size_t i = 0; i < text.length();) {
+        unsigned char ch = static_cast<unsigned char>(text[i]);
+        if (std::isspace(ch)) {
+            i++;
+            continue;
+        }
+        if (std::isdigit(ch)) {
+            std::size_t start = i;
+            i++;
+            while (i < text.length() &&
+                   std::isalnum(static_cast<unsigned char>(text[i]))) {
+                i++;
+            }
+            tokens.push_back({ExprTokenType::Number, text.substr(start, i - start)});
+            continue;
+        }
+        if (std::isalpha(ch) || text[i] == '_' || text[i] == '.') {
+            std::size_t start = i;
+            i++;
+            while (i < text.length()) {
+                unsigned char current = static_cast<unsigned char>(text[i]);
+                if (!std::isalnum(current) && text[i] != '_' && text[i] != '.') {
+                    break;
+                }
+                i++;
+            }
+            tokens.push_back({ExprTokenType::Identifier,
+                              text.substr(start, i - start)});
+            continue;
+        }
+        if (text[i] == '(') {
+            tokens.push_back({ExprTokenType::LeftParen, "("});
+            i++;
+            continue;
+        }
+        if (text[i] == ')') {
+            tokens.push_back({ExprTokenType::RightParen, ")"});
+            i++;
+            continue;
+        }
+        if (i + 1 < text.length()) {
+            std::string two = text.substr(i, 2);
+            if (two == "<<" || two == ">>") {
+                tokens.push_back({ExprTokenType::Operator, two});
+                i += 2;
+                continue;
+            }
+        }
+        if (std::string("+-*/%&^|~").find(text[i]) != std::string::npos) {
+            tokens.push_back({ExprTokenType::Operator, text.substr(i, 1)});
+            i++;
+            continue;
+        }
+        throw std::invalid_argument("Invalid expression token");
+    }
+    tokens.push_back({ExprTokenType::End, ""});
+    return tokens;
+}
+
+int expressionPrecedence(const std::string &op) {
+    if (op == "|") {
+        return 1;
+    }
+    if (op == "^") {
+        return 2;
+    }
+    if (op == "&") {
+        return 3;
+    }
+    if (op == "<<" || op == ">>") {
+        return 4;
+    }
+    if (op == "+" || op == "-") {
+        return 5;
+    }
+    if (op == "*" || op == "/" || op == "%") {
+        return 6;
+    }
+    return -1;
+}
+
+class TokenExpressionParser {
+  public:
+    TokenExpressionParser(std::vector<ExprToken> tokens,
+                          const std::unordered_map<std::string, int> &symbols)
+        : tokens(std::move(tokens)), symbols(symbols) {}
+
+    int parse() {
+        int value = parseExpression(1);
+        if (peek().type != ExprTokenType::End) {
+            throw std::invalid_argument("Unexpected expression input");
+        }
+        return value;
+    }
+
+  private:
+    std::vector<ExprToken> tokens;
+    const std::unordered_map<std::string, int> &symbols;
+    std::size_t position = 0;
+
+    const ExprToken &peek() const {
+        return tokens[position];
+    }
+
+    ExprToken advance() {
+        return tokens[position++];
+    }
+
+    int parseExpression(int minPrecedence) {
+        int left = parseUnary();
+        while (peek().type == ExprTokenType::Operator) {
+            std::string op = peek().text;
+            int precedence = expressionPrecedence(op);
+            if (precedence < minPrecedence) {
+                break;
+            }
+            advance();
+            int right = parseExpression(precedence + 1);
+            left = applyBinary(op, left, right);
+        }
+        return left;
+    }
+
+    int parseUnary() {
+        if (peek().type == ExprTokenType::Operator &&
+            (peek().text == "+" || peek().text == "-" || peek().text == "~")) {
+            std::string op = advance().text;
+            int value = parseUnary();
+            if (op == "-") {
+                return -value;
+            }
+            if (op == "~") {
+                return ~value;
+            }
+            return value;
+        }
+        return parsePrimary();
+    }
+
+    int parsePrimary() {
+        ExprToken token = advance();
+        if (token.type == ExprTokenType::Number) {
+            return utils::parseNumber(token.text);
+        }
+        if (token.type == ExprTokenType::Identifier) {
+            auto found = symbols.find(token.text);
+            if (found == symbols.end()) {
+                throw std::invalid_argument("Unknown symbol " + token.text);
+            }
+            return found->second;
+        }
+        if (token.type == ExprTokenType::LeftParen) {
+            int value = parseExpression(1);
+            if (peek().type != ExprTokenType::RightParen) {
+                throw std::invalid_argument("Missing closing parenthesis");
+            }
+            advance();
+            return value;
+        }
+        throw std::invalid_argument("Expected expression term");
+    }
+
+    int applyBinary(const std::string &op, int left, int right) {
+        if (op == "+") {
+            return left + right;
+        }
+        if (op == "-") {
+            return left - right;
+        }
+        if (op == "*") {
+            return left * right;
+        }
+        if (op == "/") {
+            if (right == 0) {
+                throw std::invalid_argument("Division by zero");
+            }
+            return left / right;
+        }
+        if (op == "%") {
+            if (right == 0) {
+                throw std::invalid_argument("Modulo by zero");
+            }
+            return left % right;
+        }
+        if (op == "<<") {
+            if (right < 0 || right >= 32) {
+                throw std::invalid_argument("Invalid left shift");
+            }
+            return left << right;
+        }
+        if (op == ">>") {
+            if (right < 0 || right >= 32) {
+                throw std::invalid_argument("Invalid right shift");
+            }
+            return left >> right;
+        }
+        if (op == "&") {
+            return left & right;
+        }
+        if (op == "^") {
+            return left ^ right;
+        }
+        if (op == "|") {
+            return left | right;
+        }
+        throw std::invalid_argument("Unknown operator");
+    }
+};
+}
+
+bool utils::evaluateExpression(
+    const std::string &text,
+    const std::unordered_map<std::string, int> &symbols,
+    int &value) {
+    try {
+        TokenExpressionParser parser(tokenizeExpression(trim(text)), symbols);
+        value = parser.parse();
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
 Parser::Parser(const std::string &input, const std::string &sourcePath)
     : input(input), sourcePath(sourcePath) {
     Dictionary::registerAllInstructions();
@@ -376,6 +647,8 @@ void Parser::fail(std::size_t line, const std::string &message) const {
 
 void Parser::parse() {
     expressions.clear();
+    macros.clear();
+    macroExpansionDepth = 0;
     std::vector<std::string> includeStack;
     parseSource(input, sourcePath, includeStack);
 }
@@ -390,6 +663,103 @@ void Parser::parseSource(const std::string &source, const std::string &path,
         if (trimmedLine.empty()) {
             continue;
         }
+
+        std::string firstToken;
+        size_t firstEnd = 0;
+        while (firstEnd < trimmedLine.length() &&
+               !std::isblank(static_cast<unsigned char>(trimmedLine[firstEnd]))) {
+            firstToken += trimmedLine[firstEnd];
+            firstEnd++;
+        }
+
+        if (firstToken == ".macro") {
+            size_t i = firstEnd;
+            while (i < trimmedLine.length() &&
+                   std::isblank(static_cast<unsigned char>(trimmedLine[i]))) {
+                i++;
+            }
+            size_t nameStart = i;
+            while (i < trimmedLine.length() &&
+                   !std::isblank(static_cast<unsigned char>(trimmedLine[i])) &&
+                   trimmedLine[i] != ',') {
+                i++;
+            }
+            std::string macroName = trimmedLine.substr(nameStart, i - nameStart);
+            if (!isIdentifier(macroName) || macroName.starts_with(".")) {
+                fail(lineNumber, ".macro expects a macro name.");
+            }
+            if (macros.contains(macroName)) {
+                fail(lineNumber, "Macro " + macroName + " is already defined.");
+            }
+            while (i < trimmedLine.length() &&
+                   (std::isblank(static_cast<unsigned char>(trimmedLine[i])) ||
+                    trimmedLine[i] == ',')) {
+                i++;
+            }
+            std::vector<std::string> parameters =
+                utils::splitArguments(trimmedLine.substr(i));
+            for (const std::string &parameter : parameters) {
+                if (!isIdentifier(parameter)) {
+                    fail(lineNumber, "Invalid macro parameter " + parameter + ".");
+                }
+            }
+
+            MacroDefinition macro;
+            macro.parameters = parameters;
+            macro.line = lineNumber;
+            bool foundEnd = false;
+            while (++lineIndex < lines.size()) {
+                std::string bodyLine =
+                    utils::trim(utils::stripComment(lines[lineIndex]));
+                if (bodyLine == ".endmacro") {
+                    foundEnd = true;
+                    break;
+                }
+                if (bodyLine.starts_with(".macro")) {
+                    fail(lineIndex + 1, "Nested macros are not supported.");
+                }
+                macro.body.push_back(lines[lineIndex]);
+            }
+            if (!foundEnd) {
+                fail(lineNumber, "Macro " + macroName + " is missing .endmacro.");
+            }
+            macros[macroName] = macro;
+            continue;
+        }
+
+        if (firstToken == ".endmacro") {
+            fail(lineNumber, ".endmacro without matching .macro.");
+        }
+
+        auto macro = macros.find(firstToken);
+        if (macro != macros.end()) {
+            if (macroExpansionDepth >= 64) {
+                fail(lineNumber, "Macro expansion depth exceeded.");
+            }
+            std::string argumentText = utils::trim(trimmedLine.substr(firstEnd));
+            std::vector<std::string> arguments = utils::splitArguments(argumentText);
+            if (arguments.size() != macro->second.parameters.size()) {
+                fail(lineNumber,
+                     "Macro " + firstToken + " expected " +
+                         std::to_string(macro->second.parameters.size()) +
+                         " arguments but got " +
+                         std::to_string(arguments.size()) + ".");
+            }
+            std::unordered_map<std::string, std::string> replacements;
+            for (size_t i = 0; i < arguments.size(); i++) {
+                replacements[macro->second.parameters[i]] = arguments[i];
+            }
+            std::string expanded;
+            for (const std::string &bodyLine : macro->second.body) {
+                expanded += replaceMacroArguments(bodyLine, replacements);
+                expanded += '\n';
+            }
+            macroExpansionDepth++;
+            parseSource(expanded, path, includeStack);
+            macroExpansionDepth--;
+            continue;
+        }
+
         if (trimmedLine[trimmedLine.length() - 1] == ':') {
             expressions.push_back(std::make_unique<Label>(
                 trimmedLine.substr(0, trimmedLine.length() - 1), lineNumber));
@@ -484,13 +854,17 @@ void Parser::verifyIntegrity() {
             for (auto &validInstruction : Dictionary::all()) {
                 if (instruction->opcode == validInstruction->name &&
                     instruction->operands.size() ==
-                        validInstruction->argumentCount) {
+                        static_cast<std::size_t>(
+                            validInstruction->argumentCount)) {
                     foundMatch = true;
 
                     for (auto argument : instruction->operands) {
                         if (argument.starts_with("0") ||
                             std::isdigit(
                                 static_cast<unsigned char>(argument[0]))) {
+                            if (isExpressionCandidate(argument)) {
+                                continue;
+                            }
                             try {
                                 int val = utils::parseNumber(argument);
                                 (void)val;
@@ -519,7 +893,8 @@ void Parser::verifyIntegrity() {
                 }
                 if (instruction->opcode == validInstruction->name &&
                     instruction->operands.size() !=
-                        validInstruction->argumentCount) {
+                        static_cast<std::size_t>(
+                            validInstruction->argumentCount)) {
                     fail(instruction->line,
                          "Instruction " + instruction->opcode + " expected " +
                              std::to_string(validInstruction->argumentCount) +
@@ -610,6 +985,14 @@ void Parser::verifySpecialRegisters(Instruction *instruction) {
 
 void Parser::parseAddressingModes() {
     const auto constants = collectParserConstants(expressions);
+    std::unordered_map<std::string, int> parserSymbols = constants;
+    for (const auto &expression : expressions) {
+        if (expression->type != ExpressionType::Label) {
+            continue;
+        }
+        auto *label = dynamic_cast<Label *>(expression.get());
+        parserSymbols[label->name] = 0;
+    }
 
     for (auto &expression : expressions) {
         if (expression->type == ExpressionType::Instruction) {
@@ -622,6 +1005,14 @@ void Parser::parseAddressingModes() {
                     instruction->parsedOperands.push_back(InstructionOperand(
                         AddressingMode::Immediate,
                         normalizeNumber(resolvedExpression)));
+                    continue;
+                }
+
+                int deferredExpression = 0;
+                if (utils::evaluateExpression(operand, parserSymbols,
+                                              deferredExpression)) {
+                    instruction->parsedOperands.push_back(InstructionOperand(
+                        AddressingMode::Immediate, operand));
                     continue;
                 }
 
@@ -641,33 +1032,32 @@ void Parser::parseAddressingModes() {
                 }
 
                 if (operand.starts_with("dp:")) {
-                    try {
-                        int val = utils::parseNumber(operand.substr(3));
+                    int val = 0;
+                    if (utils::evaluateExpression(operand.substr(3), constants,
+                                                  val)) {
                         instruction->parsedOperands.push_back(
                             InstructionOperand(AddressingMode::DirectPageOffset,
                                                "dp", val));
                         continue;
-                    } catch (...) {
-                        fail(instruction->line,
-                             "Badly formulated direct page offset mode "
-                             "argument " +
-                                 operand + ".");
                     }
+                    fail(instruction->line,
+                         "Badly formulated direct page offset mode argument " +
+                             operand + ".");
                 }
 
                 if (operand.starts_with("#")) {
-                    try {
-                        int val = utils::parseNumber(operand.substr(1));
+                    int val = 0;
+                    if (utils::evaluateExpression(operand.substr(1), constants,
+                                                  val)) {
                         instruction->parsedOperands.push_back(
                             InstructionOperand(AddressingMode::StackRelative,
                                                "sp", val));
                         continue;
-                    } catch (...) {
-                        fail(instruction->line,
-                             "Badly formulated stack-relative "
-                             "offset mode argument " +
-                                 operand + ".");
                     }
+                    fail(instruction->line,
+                         "Badly formulated stack-relative offset mode "
+                         "argument " +
+                             operand + ".");
                 }
 
                 if (operand[0] == '@') {
@@ -684,16 +1074,32 @@ void Parser::parseAddressingModes() {
                                     normalizeNumber(resolvedAddress)));
                             continue;
                         }
+
+                        if (utils::evaluateExpression(inner, parserSymbols,
+                                                      resolvedAddress)) {
+                            instruction->parsedOperands.push_back(
+                                InstructionOperand(AddressingMode::Absolute,
+                                                   inner));
+                            continue;
+                        }
                     }
 
-                    try {
-                        int val = utils::parseNumber(operand.substr(1));
-                        (void)val;
+                    int resolvedAddress = 0;
+                    if (utils::evaluateExpression(operand.substr(1), constants,
+                                                  resolvedAddress)) {
+                        instruction->parsedOperands.push_back(
+                            InstructionOperand(AddressingMode::Absolute,
+                                               normalizeNumber(resolvedAddress)));
+                        continue;
+                    }
+
+                    if (utils::evaluateExpression(operand.substr(1),
+                                                  parserSymbols,
+                                                  resolvedAddress)) {
                         instruction->parsedOperands.push_back(
                             InstructionOperand(AddressingMode::Absolute,
                                                operand.substr(1)));
                         continue;
-                    } catch (...) {
                     }
 
                     if (isRegister(operand.substr(1))) {
@@ -707,7 +1113,7 @@ void Parser::parseAddressingModes() {
                         operand.back() == ')') {
                         std::string inner = utils::trim(
                             operand.substr(2, operand.length() - 3));
-                        size_t signPos = findOffsetOperator(inner);
+                        size_t signPos = findTopLevelOffsetOperator(inner);
 
                         if (signPos == std::string::npos) {
                             fail(instruction->line,
@@ -736,19 +1142,19 @@ void Parser::parseAddressingModes() {
                         }
 
                         if (isRegister(left)) {
-                            try {
-                                int val = utils::parseNumber(
-                                    (sign == '-' ? "-" : "") + right);
+                            int val = 0;
+                            if (utils::evaluateExpression(
+                                    (sign == '-' ? "-" : "") + right,
+                                    constants, val)) {
                                 instruction->parsedOperands.push_back(
                                     InstructionOperand(
                                         AddressingMode::BasePlusOffset, left,
                                         val));
                                 continue;
-                            } catch (...) {
-                                fail(instruction->line,
-                                     "The offsetting mode for argument " +
-                                         operand + " is badly formulated");
                             }
+                            fail(instruction->line,
+                                 "The offsetting mode for argument " +
+                                     operand + " is badly formulated");
                         }
 
                         fail(instruction->line,

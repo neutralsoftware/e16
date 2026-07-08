@@ -5,6 +5,19 @@
 
 namespace e16 {
 
+namespace {
+bool inRange(std::uint32_t address, std::uint32_t start, std::uint32_t end) {
+    return address >= start && address <= end;
+}
+
+bool isBackedMemory(std::uint32_t address) {
+    return inRange(address, 0x000000, 0x03FFFF) ||
+           inRange(address, AudioRamBase, AudioRamEnd) ||
+           inRange(address, CartridgeRomBase, CartridgeRomEnd) ||
+           inRange(address, BiosRomBase, BiosRomEnd);
+}
+}
+
 Memory::Memory(Flame &flame) : flameDevice(flame), bytes(MemorySize, 0) {}
 
 void Memory::reset() {
@@ -25,17 +38,26 @@ void Memory::load(std::uint32_t address,
 
 std::uint8_t Memory::read8(std::uint32_t address) const {
     address = mask24(address);
-    if (address >= FlameVramBase && address <= FlameVramEnd) {
+    if (inRange(address, FlameVramBase, FlameVramEnd)) {
         return flameDevice.readVram(address);
     }
-    if (address >= FlameMmioBase && address <= FlameMmioEnd) {
-        return flameDevice.readMmio(address);
-    }
-    if (address >= DmaBase && address <= DmaEnd) {
+    if (inRange(address, DmaBase, DmaEnd)) {
         return readDma(address);
     }
-    if (address >= InputBase && address <= InputEnd) {
+    if (inRange(address, FlameMmioBase, FlameMmioEnd)) {
+        return flameDevice.readMmio(address);
+    }
+    if (inRange(address, ApuBase, ApuEnd)) {
+        return 0;
+    }
+    if (inRange(address, InputBase, InputEnd)) {
         return readInput(address);
+    }
+    if (inRange(address, MmioBase, MmioEnd)) {
+        return 0;
+    }
+    if (!isBackedMemory(address)) {
+        return 0;
     }
     return bytes[address];
 }
@@ -53,19 +75,31 @@ std::uint32_t Memory::read24(std::uint32_t address) const {
 
 void Memory::write8(std::uint32_t address, std::uint8_t value) {
     address = mask24(address);
-    if (address >= FlameVramBase && address <= FlameVramEnd) {
+    if (inRange(address, FlameVramBase, FlameVramEnd)) {
         flameDevice.writeVram(address, value);
         return;
     }
-    if (address >= FlameMmioBase && address <= FlameMmioEnd) {
-        flameDevice.writeMmio(address, value);
-        return;
-    }
-    if (address >= DmaBase && address <= DmaEnd) {
+    if (inRange(address, DmaBase, DmaEnd)) {
         writeDma(address, value);
         return;
     }
-    if (address >= InputBase && address <= InputEnd) {
+    if (inRange(address, FlameMmioBase, FlameMmioEnd)) {
+        flameDevice.writeMmio(address, value);
+        return;
+    }
+    if (inRange(address, ApuBase, ApuEnd)) {
+        return;
+    }
+    if (inRange(address, InputBase, InputEnd)) {
+        return;
+    }
+    if (inRange(address, MmioBase, MmioEnd)) {
+        return;
+    }
+    if (inRange(address, SaveRamBase, SaveRamEnd) ||
+        inRange(address, CartridgeRomBase, CartridgeRomEnd) ||
+        inRange(address, BiosRomBase, BiosRomEnd) ||
+        !isBackedMemory(address)) {
         return;
     }
     bytes[address] = value;
@@ -95,22 +129,21 @@ void Memory::requestDma() {
     if (length == 0) {
         length = 0x10000;
     }
-    dma[10] |= 0x01;
+    dma[9] |= 0x01;
     for (std::uint32_t i = 0; i < length; i++) {
         write8(dest + i, read8(source + i));
     }
     dma[8] = 0;
-    dma[9] = 0;
-    dma[10] &= static_cast<std::uint8_t>(~0x01);
-    dma[10] |= 0x02;
+    dma[9] &= static_cast<std::uint8_t>(~0x01);
+    dma[9] |= 0x02;
 }
 
 std::uint8_t Memory::readDma(std::uint32_t address) const {
-    return dma[(address - DmaBase) & 0x1F];
+    return dma[address - DmaBase];
 }
 
 void Memory::writeDma(std::uint32_t address, std::uint8_t value) {
-    std::uint32_t offset = (address - DmaBase) & 0x1F;
+    std::uint32_t offset = address - DmaBase;
     dma[offset] = value;
     if (offset == 8 && (value & 0x01) != 0) {
         requestDma();

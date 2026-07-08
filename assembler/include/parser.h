@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 enum class ExpressionType { Instruction, Label, Directive };
@@ -100,6 +101,15 @@ class Parser {
     static std::string addressingModeToString(AddressingMode mode);
 
   private:
+    struct MacroDefinition {
+        std::vector<std::string> parameters;
+        std::vector<std::string> body;
+        std::size_t line = 0;
+    };
+
+    std::unordered_map<std::string, MacroDefinition> macros;
+    int macroExpansionDepth = 0;
+
     void parseSource(const std::string &source, const std::string &path,
                      std::vector<std::string> &includeStack);
     [[noreturn]] void fail(std::size_t line, const std::string &message) const;
@@ -134,6 +144,10 @@ std::vector<std::string> splitArguments(const std::string &str);
 std::string trim(std::string str);
 std::string stripComment(const std::string &str);
 int parseNumber(const std::string &s);
+bool evaluateExpression(
+    const std::string &text,
+    const std::unordered_map<std::string, int> &symbols,
+    int &value);
 } // namespace utils
 
 #endif

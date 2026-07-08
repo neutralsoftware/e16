@@ -114,11 +114,6 @@ bool isGeneralRegister(const std::string &value) {
     return id >= 0 && id < 16;
 }
 
-bool isSpecialRegister(const std::string &value) {
-    return value == "pc" || value == "sp" || value == "fp" || value == "fl" ||
-           value == "dp" || value == "ivt";
-}
-
 std::uint8_t generalRegisterId(const std::string &value, std::size_t line) {
     if (!isGeneralRegister(value)) {
         fail(line, "Expected a general register, got " + value + ".");
@@ -350,13 +345,13 @@ void Compiler::collectConstants() {
                                       "defined.");
         }
 
-        try {
-            constants[directive->arguments[0]] =
-                utils::parseNumber(directive->arguments[1]);
-        } catch (...) {
+        int value = 0;
+        if (!utils::evaluateExpression(directive->arguments[1], constants,
+                                       value)) {
             fail(directive->line, "Constant " + directive->arguments[0] +
                                       " must resolve to a number.");
         }
+        constants[directive->arguments[0]] = value;
     }
 }
 
@@ -414,14 +409,11 @@ std::size_t Compiler::directiveSize(const Directive &directive) const {
     }
 
     auto resolve = [&](const std::string &value) -> int {
-        if (constants.contains(value)) {
-            return constants.at(value);
-        }
-        try {
-            return utils::parseNumber(value);
-        } catch (...) {
+        int resolved = 0;
+        if (!utils::evaluateExpression(value, constants, resolved)) {
             fail(directive.line, "Could not resolve " + value + ".");
         }
+        return resolved;
     };
 
     if (directive.name == ".string") {
@@ -628,17 +620,15 @@ std::size_t Compiler::instructionSize(const Instruction &instruction) const {
 void Compiler::emitDirective(const Directive &directive,
                              std::vector<std::uint8_t> &bytes) const {
     auto resolve = [&](const std::string &value) -> int {
-        if (constants.contains(value)) {
-            return constants.at(value);
+        std::unordered_map<std::string, int> values = constants;
+        for (const auto &[name, address] : symbols) {
+            values[name] = static_cast<int>(address);
         }
-        if (symbols.contains(value)) {
-            return static_cast<int>(symbols.at(value));
-        }
-        try {
-            return utils::parseNumber(value);
-        } catch (...) {
+        int resolved = 0;
+        if (!utils::evaluateExpression(value, values, resolved)) {
             fail(directive.line, "Could not resolve " + value + ".");
         }
+        return resolved;
     };
 
     if (directive.name == ".const" || directive.name == ".constant" ||
@@ -727,18 +717,16 @@ void Compiler::emitInstruction(const Instruction &instruction,
             operand.mode == AddressingMode::Absolute ||
             operand.mode == AddressingMode::Indexed ||
             operand.mode == AddressingMode::Label) {
-            if (constants.contains(operand.base)) {
-                return constants.at(operand.base);
+            std::unordered_map<std::string, int> values = constants;
+            for (const auto &[name, address] : symbols) {
+                values[name] = static_cast<int>(address);
             }
-            if (symbols.contains(operand.base)) {
-                return static_cast<int>(symbols.at(operand.base));
-            }
-            try {
-                return utils::parseNumber(operand.base);
-            } catch (...) {
+            int resolved = 0;
+            if (!utils::evaluateExpression(operand.base, values, resolved)) {
                 fail(instruction.line,
                      "Could not resolve symbol " + operand.base + ".");
             }
+            return resolved;
         }
 
         fail(instruction.line, "Operand does not resolve to a number.");

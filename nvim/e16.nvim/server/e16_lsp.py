@@ -1,7 +1,10 @@
 import json
+import os
 import re
 import sys
 import traceback
+from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 INSTRUCTIONS = {
     "nop": (0x00, 0),
@@ -120,6 +123,9 @@ DIRECTIVES = {
     ".byte",
     ".word",
     ".addr24",
+    ".bin",
+    ".macro",
+    ".endmacro",
 }
 
 TOKEN_TYPES = [
@@ -370,30 +376,104 @@ def location(uri, line, start, length):
     return {"uri": uri, "range": range_for(line, start, length)}
 
 
-def parse_document(text):
+def path_from_uri(uri):
+    parsed = urlparse(uri)
+    if parsed.scheme != "file":
+        return None
+    return unquote(parsed.path)
+
+
+def uri_from_path(path):
+    return Path(path).resolve().as_uri()
+
+
+def decode_string_literal(value):
+    value = value.strip()
+    if len(value) < 2 or value[0] not in ("'", '"') or value[-1] != value[0]:
+        return None
+    result = []
+    escaped = False
+    for char in value[1:-1]:
+        if escaped:
+            result.append({"n": "\n", "r": "\r", "t": "\t", "0": "\0"}.get(char, char))
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        result.append(char)
+    return "".join(result)
+
+
+def read_include(uri, include_value):
+    include_path = decode_string_literal(include_value)
+    if include_path is None:
+        return None, None, "Expected a file path string literal"
+    if not os.path.isabs(include_path):
+        base_path = path_from_uri(uri)
+        base_dir = os.path.dirname(base_path) if base_path else os.getcwd()
+        include_path = os.path.join(base_dir, include_path)
+    include_path = os.path.realpath(include_path)
+    include_uri = uri_from_path(include_path)
+    if include_uri in DOCS:
+        return include_uri, DOCS[include_uri], None
+    try:
+        with open(include_path, "r", encoding="utf-8") as handle:
+            return include_uri, handle.read(), None
+    except OSError as error:
+        return include_uri, None, str(error)
+
+
+def parse_document(text, uri="", include_stack=None):
+    if include_stack is None:
+        include_stack = set()
     labels = {}
     constants = {}
+    macros = {}
     symbols = []
     diagnostics = []
+    includes = []
+    pending_unknown_opcodes = []
     lines = text.splitlines()
+    in_macro = False
     for line_number, raw in enumerate(lines):
         code, comment = split_comment(raw)
         stripped = code.strip()
         if not stripped:
             continue
+        if in_macro:
+            if stripped == ".endmacro":
+                in_macro = False
+            continue
         label_match = re.match(r"^\s*([A-Za-z_.][A-Za-z0-9_.]*)\s*:\s*$", code)
         if label_match:
             name = label_match.group(1)
             start = label_match.start(1)
-            labels[name] = location("", line_number, start, len(name))
+            labels[name] = location(uri, line_number, start, len(name))
             symbols.append({"name": name, "kind": 12, "range": range_for(line_number, start, len(name)), "selectionRange": range_for(line_number, start, len(name))})
             continue
         const_match = re.match(r"^\s*\.(const|constant)\s+([A-Za-z_.][A-Za-z0-9_.]*)\s*,\s*(.+)$", code)
         if const_match:
             name = const_match.group(2)
             start = const_match.start(2)
-            constants[name] = location("", line_number, start, len(name))
+            constants[name] = location(uri, line_number, start, len(name))
             symbols.append({"name": name, "kind": 14, "range": range_for(line_number, start, len(name)), "selectionRange": range_for(line_number, start, len(name))})
+            continue
+        macro_match = re.match(r"^\s*\.macro\s+([A-Za-z_.][A-Za-z0-9_.]*)", code)
+        if macro_match:
+            name = macro_match.group(1)
+            start = macro_match.start(1)
+            macros[name] = location(uri, line_number, start, len(name))
+            symbols.append({"name": name, "kind": 6, "range": range_for(line_number, start, len(name)), "selectionRange": range_for(line_number, start, len(name))})
+            in_macro = True
+            continue
+        include_match = re.match(r"^\s*\.include\s+(.+)$", code)
+        if include_match:
+            arguments = split_arguments(include_match.group(1))
+            if len(arguments) != 1:
+                diagnostics.append(diag(line_number, include_match.start(1), max(len(include_match.group(1)), 1), ".include expects exactly one file path argument"))
+            else:
+                includes.append((line_number, include_match.start(1), arguments[0]))
             continue
         if stripped.startswith("."):
             directive = stripped.split(None, 1)[0]
@@ -407,7 +487,7 @@ def parse_document(text):
         opcode = match.group(1)
         start = match.start(1)
         if opcode not in INSTRUCTIONS:
-            diagnostics.append(diag(line_number, start, len(opcode), "Unknown E16 instruction " + opcode))
+            pending_unknown_opcodes.append((line_number, start, opcode))
             continue
         expected = INSTRUCTIONS[opcode][1]
         operands = split_arguments(match.group(2).strip())
@@ -418,14 +498,44 @@ def parse_document(text):
                 if reg not in REGISTERS:
                     reg_start = raw.find(reg)
                     diagnostics.append(diag(line_number, reg_start, len(reg), "Invalid E16 register " + reg))
-    known = set(labels) | set(constants)
+    include_key = uri or "<memory>"
+    include_stack.add(include_key)
+    for line_number, start, include_value in includes:
+        include_uri, include_text, error = read_include(uri, include_value)
+        if error:
+            diagnostics.append(diag(line_number, start, len(include_value), "Could not read include: " + error))
+            continue
+        if include_uri in include_stack:
+            diagnostics.append(diag(line_number, start, len(include_value), "Recursive include detected"))
+            continue
+        include_labels, include_constants, include_macros, include_symbols, include_diagnostics = parse_document(include_text, include_uri, set(include_stack))
+        for name, data in include_labels.items():
+            labels.setdefault(name, data)
+        for name, data in include_constants.items():
+            constants.setdefault(name, data)
+        for name, data in include_macros.items():
+            macros.setdefault(name, data)
+
+    known = set(labels) | set(constants) | set(macros)
+    for line_number, start, opcode in pending_unknown_opcodes:
+        if opcode not in macros:
+            diagnostics.append(diag(line_number, start, len(opcode), "Unknown E16 instruction " + opcode))
+    in_macro = False
     for line_number, raw in enumerate(lines):
         code, comment = split_comment(raw)
         stripped = code.strip()
         if not stripped or stripped.startswith(".") or stripped.endswith(":"):
+            if stripped.startswith(".macro"):
+                in_macro = True
+            elif stripped == ".endmacro":
+                in_macro = False
+            continue
+        if in_macro:
             continue
         match = re.match(r"^\s*([A-Za-z_.][A-Za-z0-9_.]*)(.*)$", code)
-        if not match or match.group(1) not in INSTRUCTIONS:
+        if not match or (match.group(1) not in INSTRUCTIONS and match.group(1) not in macros):
+            continue
+        if match.group(1) in macros:
             continue
         for token in IDENT.finditer(match.group(2)):
             value = token.group(0)
@@ -436,7 +546,8 @@ def parse_document(text):
             if re.match(r"^r[0-9]+$", value):
                 continue
             diagnostics.append(diag(line_number, token.start(), len(value), "Unknown E16 symbol " + value, 2))
-    return labels, constants, symbols, diagnostics
+    include_stack.remove(include_key)
+    return labels, constants, macros, symbols, diagnostics
 
 
 def diag(line, start, length, message, severity=1):
@@ -453,13 +564,13 @@ def uri_text(uri):
 
 
 def publish(uri):
-    labels, constants, symbols, diagnostics = parse_document(uri_text(uri))
+    labels, constants, macros, symbols, diagnostics = parse_document(uri_text(uri), uri)
     notify("textDocument/publishDiagnostics", {"uri": uri, "diagnostics": diagnostics})
 
 
 def completion_items(uri):
     text = uri_text(uri)
-    labels, constants, symbols, diagnostics = parse_document(text)
+    labels, constants, macros, symbols, diagnostics = parse_document(text, uri)
     items = []
     for name, data in sorted(INSTRUCTIONS.items()):
         group = GROUPS.get(name, "e16Helper")[3:]
@@ -472,13 +583,15 @@ def completion_items(uri):
         items.append({"label": name, "kind": 17, "detail": "E16 label"})
     for name in sorted(constants):
         items.append({"label": name, "kind": 21, "detail": "E16 constant"})
+    for name in sorted(macros):
+        items.append({"label": name, "kind": 15, "detail": "E16 macro"})
     return {"isIncomplete": False, "items": items}
 
 
 def hover(uri, position):
     text = uri_text(uri)
     word = word_at(text, position["line"], position["character"])
-    labels, constants, symbols, diagnostics = parse_document(text)
+    labels, constants, macros, symbols, diagnostics = parse_document(text, uri)
     if word in INSTRUCTIONS:
         opcode, count = INSTRUCTIONS[word]
         value = word + "\n" + GROUPS.get(word, "e16Helper")[3:] + "\nopcode " + hex(opcode) + "\noperands " + str(count)
@@ -488,6 +601,8 @@ def hover(uri, position):
         value = word + "\nE16 label"
     elif word in constants:
         value = word + "\nE16 constant"
+    elif word in macros:
+        value = word + "\nE16 macro"
     elif word in DIRECTIVES:
         value = word + "\nE16 directive"
     elif "." + word in DIRECTIVES:
@@ -500,17 +615,15 @@ def hover(uri, position):
 def definition(uri, position):
     text = uri_text(uri)
     word = word_at(text, position["line"], position["character"])
-    labels, constants, symbols, diagnostics = parse_document(text)
-    found = labels.get(word) or constants.get(word)
+    labels, constants, macros, symbols, diagnostics = parse_document(text, uri)
+    found = labels.get(word) or constants.get(word) or macros.get(word)
     if not found:
         return None
-    found = dict(found)
-    found["uri"] = uri
-    return found
+    return dict(found)
 
 
 def document_symbols(uri):
-    labels, constants, symbols, diagnostics = parse_document(uri_text(uri))
+    labels, constants, macros, symbols, diagnostics = parse_document(uri_text(uri), uri)
     return symbols
 
 
@@ -525,7 +638,7 @@ def add_token(tokens, last, line, start, length, kind):
 
 def semantic_tokens(uri):
     text = uri_text(uri)
-    labels, constants, symbols, diagnostics = parse_document(text)
+    labels, constants, macros, symbols, diagnostics = parse_document(text, uri)
     tokens = []
     last = (0, 0)
     for line_number, raw in enumerate(text.splitlines()):

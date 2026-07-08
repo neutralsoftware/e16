@@ -30,7 +30,7 @@ class Memory {
   private:
     Flame &flameDevice;
     std::vector<std::uint8_t> bytes;
-    std::array<std::uint8_t, 0x20> dma{};
+    std::array<std::uint8_t, 0x100> dma{};
 
     std::uint8_t readDma(std::uint32_t address) const;
     void writeDma(std::uint32_t address, std::uint8_t value);

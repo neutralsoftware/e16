@@ -1,0 +1,97 @@
+.const VPU_CONTROL, 0xFF1000
+.const VPU_BACKDROP, 0xFF1008
+.const OAM_BASE, 0xFF1200
+.const PALETTE_BASE, 0xFF1800
+.const VRAM_SPR_TILES, 0x048000
+
+.const SMILE_PALETTE_ADDRESS, 0xFF1800
+
+.const DMA_SRC_0, 0xFF0300
+.const DMA_SRC_1,     0xFF0301
+.const DMA_SRC_2,     0xFF0302
+.const DMA_DST_0,     0xFF0303
+.const DMA_DST_1,     0xFF0304
+.const DMA_DST_2,     0xFF0305
+.const DMA_LEN_0,     0xFF0306
+.const DMA_LEN_1,     0xFF0307
+.const DMA_CONTROL,   0xFF0308
+.const DMA_STATUS,    0xFF0309
+
+.const DMA_START,     0x01
+
+.macro dma_copy SRC, DST, LEN
+    mov r0, (SRC & 0xFF)
+    storeb @DMA_SRC_0, r0
+
+    mov r0, ((SRC >> 8) & 0xFF)
+    storeb @DMA_SRC_1, r0
+
+    mov r0, ((SRC >> 16) & 0xFF)
+    storeb @DMA_SRC_2, r0
+
+    mov r0, (DST & 0xFF)
+    storeb @DMA_DST_0, r0
+
+    mov r0, ((DST >> 8) & 0xFF)
+    storeb @DMA_DST_1, r0
+
+    mov r0, ((DST >> 16) & 0xFF)
+    storeb @DMA_DST_2, r0
+
+    mov r0, (LEN & 0xFF)
+    storeb @DMA_LEN_0, r0
+
+    mov r0, ((LEN >> 8) & 0xFF)
+    storeb @DMA_LEN_1, r0
+
+    mov r0, DMA_START
+    storeb @DMA_CONTROL, r0
+
+.endmacro
+
+start:
+    ; Start VPU and set background
+    mov r0, 0b0000000000001011
+    store @VPU_CONTROL, r0
+
+    mov r0, 0x0
+    store @VPU_BACKDROP, r0
+
+copy_sprites_and_palettes:
+    dma_copy smiley_palette, SMILE_PALETTE_ADDRESS, 6 
+    dma_copy smiley_sprite, VRAM_SPR_TILES, 32
+
+    ; Set sprite to X = 120
+    mov r0, 120
+    storeb @OAM_BASE, r0
+    mov r0, 0
+    storeb @(OAM_BASE + 1), r0
+
+    ; Set sprite to Y = 80
+    mov r0, 80
+    storeb @(OAM_BASE + 2), r0
+    mov r0, 0
+    storeb @(OAM_BASE + 3), r0
+
+    ; Set tile index to 0
+    mov r0, 0
+    storeb @(OAM_BASE + 4), r0
+    storeb @(OAM_BASE + 5), r0
+
+    ; Set attributes for palette 0
+    mov r0, 0x0
+    storeb @(OAM_BASE + 6), r0
+
+    ; Set control (enable)
+    mov r0, 0b00000100
+    storeb @(OAM_BASE + 7), r0
+
+loop:
+    wait
+    bra loop
+
+smiley_palette:
+    .bin "smile8x8.e16img", 0, 6
+
+smiley_sprite:
+    .bin "smile8x8.e16img", 6, 32
