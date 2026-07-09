@@ -11,21 +11,27 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 
-file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
-    "${CMAKE_SOURCE_DIR}/src/*.cpp"
-)
-
-add_executable(e16img ${SOURCES})
+add_executable(e16img src/main.cpp)
+add_executable(e16spritepack src/e16spritepack.cpp)
+add_executable(e16tilemap src/e16tilemap.cpp)
 
 find_library(ZLIB_LIBRARY z REQUIRED)
 target_link_libraries(e16img PRIVATE "${ZLIB_LIBRARY}")
+target_link_libraries(e16spritepack PRIVATE "${ZLIB_LIBRARY}")
+target_link_libraries(e16tilemap PRIVATE "${ZLIB_LIBRARY}")
+
+set(CONVERTER_TARGETS e16img e16spritepack e16tilemap)
 
 if(MSVC)
-    target_compile_options(e16img PRIVATE /W4)
+    foreach(target ${CONVERTER_TARGETS})
+        target_compile_options(${target} PRIVATE /W4)
+    endforeach()
 else()
-    target_compile_options(e16img PRIVATE
-        -Wall
-        -Wextra
-        -Wpedantic
-    )
+    foreach(target ${CONVERTER_TARGETS})
+        target_compile_options(${target} PRIVATE
+            -Wall
+            -Wextra
+            -Wpedantic
+        )
+    endforeach()
 endif()
