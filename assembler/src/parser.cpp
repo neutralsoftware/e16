@@ -842,7 +842,7 @@ void Parser::verifyIntegrity() {
                 directive->name == ".string" || directive->name == ".data" ||
                 directive->name == ".byte" || directive->name == ".word" ||
                 directive->name == ".addr24" || directive->name == ".include" ||
-                directive->name == ".bin") {
+                directive->name == ".symbols" || directive->name == ".bin") {
                 continue;
             }
             fail(directive->line,

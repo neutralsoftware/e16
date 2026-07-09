@@ -118,6 +118,7 @@ DIRECTIVES = {
     ".const",
     ".constant",
     ".include",
+    ".symbols",
     ".string",
     ".data",
     ".byte",
@@ -433,6 +434,7 @@ def parse_document(text, uri="", include_stack=None):
     symbols = []
     diagnostics = []
     includes = []
+    symbol_files = []
     pending_unknown_opcodes = []
     lines = text.splitlines()
     in_macro = False
@@ -475,6 +477,14 @@ def parse_document(text, uri="", include_stack=None):
             else:
                 includes.append((line_number, include_match.start(1), arguments[0]))
             continue
+        symbols_match = re.match(r"^\s*\.symbols\s+(.+)$", code)
+        if symbols_match:
+            arguments = split_arguments(symbols_match.group(1))
+            if len(arguments) != 1:
+                diagnostics.append(diag(line_number, symbols_match.start(1), max(len(symbols_match.group(1)), 1), ".symbols expects exactly one file path argument"))
+            else:
+                symbol_files.append((line_number, symbols_match.start(1), arguments[0]))
+            continue
         if stripped.startswith("."):
             directive = stripped.split(None, 1)[0]
             if directive not in DIRECTIVES:
@@ -514,6 +524,21 @@ def parse_document(text, uri="", include_stack=None):
         for name, data in include_constants.items():
             constants.setdefault(name, data)
         for name, data in include_macros.items():
+            macros.setdefault(name, data)
+    for line_number, start, symbols_value in symbol_files:
+        symbols_uri, symbols_text, error = read_include(uri, symbols_value)
+        if error:
+            diagnostics.append(diag(line_number, start, len(symbols_value), "Could not read symbols: " + error))
+            continue
+        if symbols_uri in include_stack:
+            diagnostics.append(diag(line_number, start, len(symbols_value), "Recursive symbols reference detected"))
+            continue
+        symbol_labels, symbol_constants, symbol_macros, _, _ = parse_document(symbols_text, symbols_uri, set(include_stack))
+        for name, data in symbol_labels.items():
+            labels.setdefault(name, data)
+        for name, data in symbol_constants.items():
+            constants.setdefault(name, data)
+        for name, data in symbol_macros.items():
             macros.setdefault(name, data)
 
     known = set(labels) | set(constants) | set(macros)

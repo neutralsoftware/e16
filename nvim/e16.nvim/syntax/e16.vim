@@ -8,7 +8,7 @@ syntax match e16Comment /;.*/
 syntax region e16String start=/"/ skip=/\\"/ end=/"/
 syntax region e16String start=/'/ skip=/\\'/ end=/'/
 syntax match e16Number /\v<[-+]?(0x[0-9A-Fa-f]+|0b[01]+|0o[0-7]+|[0-9]+)>/
-syntax match e16Directive /\v\.(const|constant|include|string|data|byte|word|addr24)>/
+syntax match e16Directive /\v\.(const|constant|include|symbols|string|data|byte|word|addr24)>/
 syntax match e16ConstantDef /\v^\s*\.(const|constant)\s+\zs[A-Za-z_.][A-Za-z0-9_.]*/
 syntax match e16LabelDef /\v^\s*\zs[A-Za-z_.][A-Za-z0-9_.]*\ze:/
 syntax match e16Operator /[@#(),:+-]/
