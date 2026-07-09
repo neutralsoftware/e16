@@ -1,0 +1,46 @@
+name: CMake
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+jobs:
+  build:
+    name: Build tools
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ pkg-config libsdl3-dev zlib1g-dev
+
+      - name: Configure assembler
+        run: cmake -S assembler -B build/assembler -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build assembler
+        run: cmake --build build/assembler --config Release --parallel
+
+      - name: Configure emulator
+        run: cmake -S emulator -B build/emulator -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build emulator
+        run: cmake --build build/emulator --config Release --parallel
+
+      - name: Configure disassembler
+        run: cmake -S disassembler -B build/disassembler -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build disassembler
+        run: cmake --build build/disassembler --config Release --parallel
+
+      - name: Configure converter
+        run: cmake -S converter -B build/converter -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build converter
+        run: cmake --build build/converter --config Release --parallel
