@@ -1,5 +1,15 @@
 cmake_minimum_required(VERSION 3.10)
 
+if (CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
+    execute_process(
+            COMMAND /usr/bin/xcrun --find clang++
+            OUTPUT_VARIABLE XCODE_CLANGXX
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            COMMAND_ERROR_IS_FATAL ANY
+    )
+    set(CMAKE_CXX_COMPILER "${XCODE_CLANGXX}" CACHE FILEPATH "" FORCE)
+endif ()
+
 project(E16Emulator LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)

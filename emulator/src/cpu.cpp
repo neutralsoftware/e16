@@ -411,8 +411,9 @@ std::uint32_t Cpu::memoryAddress(std::uint8_t mode, bool withRegister,
         }
         std::uint8_t baseReg = fetch8();
         std::int16_t offset = static_cast<std::int16_t>(fetch16());
-        std::uint32_t base =
-            baseReg <= 0x0F ? readReg(baseReg) : readSpecial(baseReg);
+        std::uint32_t base = baseReg <= 0x0F
+                                 ? s.dp + readReg(baseReg)
+                                 : readSpecial(baseReg);
         return mask24(base + offset);
     }
     if (mode == 0x06) {
@@ -433,13 +434,13 @@ std::uint32_t Cpu::memoryAddress(std::uint8_t mode, bool withRegister,
 StopReason Cpu::interrupt(std::uint8_t number) {
     interruptPending = false;
     waitState = false;
-    push24(s.pc);
-    push16(s.fl);
-    setFlag(FlagI, true);
     std::uint32_t vector = mem.read24(s.ivt + static_cast<std::uint32_t>(number) * 3);
     if (vector == 0) {
         return StopReason::None;
     }
+    push24(s.pc);
+    push16(s.fl);
+    setFlag(FlagI, true);
     s.pc = vector;
     return StopReason::None;
 }

@@ -11,6 +11,27 @@ namespace {
     throw std::runtime_error("line " + std::to_string(line) + ": " + message);
 }
 
+template <typename Function>
+auto withSource(const Expression &expression, Function &&function)
+    -> decltype(function()) {
+    try {
+        return function();
+    } catch (const std::exception &error) {
+        if (expression.sourcePath.empty()) {
+            throw;
+        }
+        std::string message = error.what();
+        if (message.starts_with(expression.sourcePath + ":")) {
+            throw;
+        }
+        if (message.starts_with("line ")) {
+            throw std::runtime_error(expression.sourcePath + ":" +
+                                     message.substr(5));
+        }
+        throw std::runtime_error(expression.sourcePath + ":" + message);
+    }
+}
+
 std::string decodeString(const std::string &literal, std::size_t line);
 
 bool isStringLiteral(const std::string &value) {
@@ -298,12 +319,15 @@ std::vector<std::uint8_t> Compiler::compile() {
 
     std::vector<std::uint8_t> bytes;
     for (const auto &expression : parser.expressions) {
-        if (expression->type == ExpressionType::Directive) {
-            emitDirective(*dynamic_cast<Directive *>(expression.get()), bytes);
-        } else if (expression->type == ExpressionType::Instruction) {
-            emitInstruction(*dynamic_cast<Instruction *>(expression.get()),
-                            bytes);
-        }
+        withSource(*expression, [&] {
+            if (expression->type == ExpressionType::Directive) {
+                emitDirective(*dynamic_cast<Directive *>(expression.get()),
+                              bytes);
+            } else if (expression->type == ExpressionType::Instruction) {
+                emitInstruction(
+                    *dynamic_cast<Instruction *>(expression.get()), bytes);
+            }
+        });
     }
 
     return bytes;
@@ -334,24 +358,26 @@ void Compiler::collectConstants() {
             continue;
         }
 
-        if (directive->arguments.size() != 2) {
-            fail(directive->line,
-                 "A constant directive must have exactly two arguments.");
-        }
+        withSource(*directive, [&] {
+            if (directive->arguments.size() != 2) {
+                fail(directive->line,
+                     "A constant directive must have exactly two arguments.");
+            }
 
-        if (constants.contains(directive->arguments[0])) {
-            fail(directive->line, "Constant " + directive->arguments[0] +
-                                      " is already "
-                                      "defined.");
-        }
+            if (constants.contains(directive->arguments[0])) {
+                fail(directive->line, "Constant " + directive->arguments[0] +
+                                          " is already defined.");
+            }
 
-        int value = 0;
-        if (!utils::evaluateExpression(directive->arguments[1], constants,
-                                       value)) {
-            fail(directive->line, "Constant " + directive->arguments[0] +
-                                      " must resolve to a number.");
-        }
-        constants[directive->arguments[0]] = value;
+            int value = 0;
+            if (!utils::evaluateExpression(directive->arguments[1], constants,
+                                           value)) {
+                fail(directive->line,
+                     "Constant " + directive->arguments[0] +
+                         " must resolve to a number.");
+            }
+            constants[directive->arguments[0]] = value;
+        });
     }
 }
 
@@ -363,42 +389,45 @@ void Compiler::layout() {
     std::uint32_t pc = baseAddress;
 
     for (const auto &expression : parser.expressions) {
-        addresses[expression.get()] = pc;
+        withSource(*expression, [&] {
+            addresses[expression.get()] = pc;
 
-        if (expression->type == ExpressionType::Label) {
-            const auto *label = dynamic_cast<Label *>(expression.get());
-            if (symbols.contains(label->name)) {
-                fail(label->line,
-                     "Label " + label->name + " is already defined.");
+            if (expression->type == ExpressionType::Label) {
+                const auto *label = dynamic_cast<Label *>(expression.get());
+                if (symbols.contains(label->name)) {
+                    fail(label->line,
+                         "Label " + label->name + " is already defined.");
+                }
+                symbols[label->name] = pc;
+                sizes[expression.get()] = 0;
+                return;
             }
-            symbols[label->name] = pc;
-            sizes[expression.get()] = 0;
-            continue;
-        }
 
-        if (expression->type == ExpressionType::Directive) {
-            const auto *directive = dynamic_cast<Directive *>(expression.get());
-            std::size_t size = directiveSize(*directive);
-            sizes[expression.get()] = size;
-            if (size > 0x1000000 - pc) {
-                fail(directive->line,
-                     "Output would exceed the 24-bit address space.");
+            if (expression->type == ExpressionType::Directive) {
+                const auto *directive =
+                    dynamic_cast<Directive *>(expression.get());
+                std::size_t size = directiveSize(*directive);
+                sizes[expression.get()] = size;
+                if (size > 0x1000000 - pc) {
+                    fail(directive->line,
+                         "Output would exceed the 24-bit address space.");
+                }
+                pc += static_cast<std::uint32_t>(size);
+                return;
             }
-            pc += static_cast<std::uint32_t>(size);
-            continue;
-        }
 
-        if (expression->type == ExpressionType::Instruction) {
-            const auto *instruction =
-                dynamic_cast<Instruction *>(expression.get());
-            std::size_t size = instructionSize(*instruction);
-            sizes[expression.get()] = size;
-            if (size > 0x1000000 - pc) {
-                fail(instruction->line,
-                     "Output would exceed the 24-bit address space.");
+            if (expression->type == ExpressionType::Instruction) {
+                const auto *instruction =
+                    dynamic_cast<Instruction *>(expression.get());
+                std::size_t size = instructionSize(*instruction);
+                sizes[expression.get()] = size;
+                if (size > 0x1000000 - pc) {
+                    fail(instruction->line,
+                         "Output would exceed the 24-bit address space.");
+                }
+                pc += static_cast<std::uint32_t>(size);
             }
-            pc += static_cast<std::uint32_t>(size);
-        }
+        });
     }
 }
 

@@ -33,6 +33,12 @@ jobs:
       - name: Build emulator
         run: cmake --build build/emulator --config Release --parallel
 
+      - name: Configure music maker
+        run: cmake -S musicMaker -B build/musicMaker -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build music maker
+        run: cmake --build build/musicMaker --config Release --parallel
+
       - name: Configure disassembler
         run: cmake -S disassembler -B build/disassembler -DCMAKE_BUILD_TYPE=Release
 

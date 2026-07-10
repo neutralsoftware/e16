@@ -1,0 +1,6 @@
+.const INPUT_PAD1, 0xFF3002
+
+start:
+    load r0, @INPUT_PAD1
+    wait
+    bra start

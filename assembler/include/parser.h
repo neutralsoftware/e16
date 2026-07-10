@@ -21,11 +21,12 @@ enum class ExpressionType { Instruction, Label, Directive };
 class Expression {
   public:
     Expression(ExpressionType type, const std::string &contents,
-               std::size_t line)
-        : type(type), content(contents), line(line) {}
+               std::size_t line, const std::string &sourcePath = "")
+        : type(type), content(contents), line(line), sourcePath(sourcePath) {}
     ExpressionType type;
     std::string content;
     std::size_t line;
+    std::string sourcePath;
 
     virtual ~Expression() = default;
 };
@@ -53,8 +54,9 @@ class Instruction : public Expression {
   public:
     Instruction(const std::string &opcode,
                 const std::vector<std::string> &operands,
-                const std::string &contents, std::size_t line)
-        : Expression(ExpressionType::Instruction, contents, line),
+                const std::string &contents, std::size_t line,
+                const std::string &sourcePath = "")
+        : Expression(ExpressionType::Instruction, contents, line, sourcePath),
           opcode(opcode), operands(operands) {}
 
     std::string opcode;
@@ -64,8 +66,10 @@ class Instruction : public Expression {
 
 class Label : public Expression {
   public:
-    explicit Label(const std::string &name, std::size_t line)
-        : Expression(ExpressionType::Label, name + ":", line), name(name) {}
+    explicit Label(const std::string &name, std::size_t line,
+                   const std::string &sourcePath = "")
+        : Expression(ExpressionType::Label, name + ":", line, sourcePath),
+          name(name) {}
 
     std::string name;
 };
@@ -76,12 +80,11 @@ class Directive : public Expression {
               const std::vector<std::string> &arguments,
               const std::string &contents, std::size_t line,
               const std::string &sourcePath = "")
-        : Expression(ExpressionType::Directive, contents, line), name(name),
-          arguments(arguments), sourcePath(sourcePath) {}
+        : Expression(ExpressionType::Directive, contents, line, sourcePath),
+          name(name), arguments(arguments) {}
 
     std::string name;
     std::vector<std::string> arguments;
-    std::string sourcePath;
 };
 
 class Parser {
@@ -109,6 +112,7 @@ class Parser {
 
     std::unordered_map<std::string, MacroDefinition> macros;
     int macroExpansionDepth = 0;
+    std::string diagnosticPath;
 
     void parseSource(const std::string &source, const std::string &path,
                      std::vector<std::string> &includeStack);

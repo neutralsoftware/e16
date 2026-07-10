@@ -26,6 +26,7 @@ void Memory::reset() {
     dma.fill(0);
     inputPad0 = 0;
     inputPad1 = 0;
+    inputPad1Read = false;
 }
 
 void Memory::load(std::uint32_t address,
@@ -147,6 +148,12 @@ void Memory::requestDma() {
     dma[9] |= 0x02;
 }
 
+bool Memory::consumeInputPad1Read() {
+    bool wasRead = inputPad1Read;
+    inputPad1Read = false;
+    return wasRead;
+}
+
 std::uint8_t Memory::readDma(std::uint32_t address) const {
     return dma[address - DmaBase];
 }
@@ -168,9 +175,11 @@ std::uint8_t Memory::readInput(std::uint32_t address) const {
         return static_cast<std::uint8_t>((inputPad0 >> 8) & 0xFF);
     }
     if (offset == 2) {
+        inputPad1Read = true;
         return static_cast<std::uint8_t>(inputPad1 & 0xFF);
     }
     if (offset == 3) {
+        inputPad1Read = true;
         return static_cast<std::uint8_t>((inputPad1 >> 8) & 0xFF);
     }
     return 0;

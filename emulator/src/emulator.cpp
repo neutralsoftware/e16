@@ -42,6 +42,9 @@ int Emulator::run() {
         }
 
         runFrame();
+        if (memory.consumeInputPad1Read()) {
+            sdl.enableTwoPlayerControls();
+        }
         flame.renderFrame();
         apu.stepFrame();
         if (flame.consumeVblankInterrupt()) {

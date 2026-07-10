@@ -353,13 +353,15 @@ void Flame::renderLayer(const BackgroundLayer &layer) {
             std::uint16_t tile = entry & 0x03FF;
             std::uint8_t palette =
                 static_cast<std::uint8_t>((entry >> 10) & 0x0F);
+            int sampleX = pixelX;
+            int sampleY = pixelY;
             if ((entry & 0x4000) != 0) {
-                pixelX = 7 - pixelX;
+                sampleX = 7 - sampleX;
             }
             if ((entry & 0x8000) != 0) {
-                pixelY = 7 - pixelY;
+                sampleY = 7 - sampleY;
             }
-            std::uint8_t color = tilePixel(layer.tileBase, tile, pixelX, pixelY);
+            std::uint8_t color = tilePixel(layer.tileBase, tile, sampleX, sampleY);
             if (transparent && color == 0) {
                 continue;
             }

@@ -642,6 +642,10 @@ Parser::Parser(const std::string &input, const std::string &sourcePath)
 }
 
 void Parser::fail(std::size_t line, const std::string &message) const {
+    if (!diagnosticPath.empty()) {
+        throw std::runtime_error(diagnosticPath + ":" + std::to_string(line) +
+                                 ": " + message);
+    }
     throw std::runtime_error("line " + std::to_string(line) + ": " + message);
 }
 
@@ -655,6 +659,8 @@ void Parser::parse() {
 
 void Parser::parseSource(const std::string &source, const std::string &path,
                          std::vector<std::string> &includeStack) {
+    std::string previousDiagnosticPath = diagnosticPath;
+    diagnosticPath = path;
     const std::vector<std::string> lines = utils::split(source, '\n');
     for (size_t lineIndex = 0; lineIndex < lines.size(); lineIndex++) {
         std::size_t lineNumber = lineIndex + 1;
@@ -762,7 +768,8 @@ void Parser::parseSource(const std::string &source, const std::string &path,
 
         if (trimmedLine[trimmedLine.length() - 1] == ':') {
             expressions.push_back(std::make_unique<Label>(
-                trimmedLine.substr(0, trimmedLine.length() - 1), lineNumber));
+                trimmedLine.substr(0, trimmedLine.length() - 1), lineNumber,
+                path));
         } else if (trimmedLine[0] == '.') {
             std::string name;
 
@@ -802,7 +809,19 @@ void Parser::parseSource(const std::string &source, const std::string &path,
                 }
 
                 includeStack.push_back(includeKey);
-                parseSource(readTextFile(includePath), includeKey, includeStack);
+                try {
+                    parseSource(readTextFile(includePath), includeKey,
+                                includeStack);
+                } catch (const std::exception &error) {
+                    includeStack.pop_back();
+                    std::string message = error.what();
+                    if (message.starts_with(includeKey + ":")) {
+                        diagnosticPath = previousDiagnosticPath;
+                        throw;
+                    }
+                    diagnosticPath = path;
+                    fail(lineNumber, message);
+                }
                 includeStack.pop_back();
                 continue;
             }
@@ -829,13 +848,15 @@ void Parser::parseSource(const std::string &source, const std::string &path,
                 utils::splitArguments(trimmedLine.substr(i));
 
             expressions.push_back(std::make_unique<Instruction>(
-                opcode, operands, std::string(trimmedLine), lineNumber));
+                opcode, operands, std::string(trimmedLine), lineNumber, path));
         }
     }
+    diagnosticPath = previousDiagnosticPath;
 }
 
 void Parser::verifyIntegrity() {
     for (auto &expression : expressions) {
+        diagnosticPath = expression->sourcePath;
         if (expression->type == ExpressionType::Directive) {
             auto directive = dynamic_cast<Directive *>(expression.get());
             if (directive->name == ".const" || directive->name == ".constant" ||
@@ -995,6 +1016,7 @@ void Parser::parseAddressingModes() {
     }
 
     for (auto &expression : expressions) {
+        diagnosticPath = expression->sourcePath;
         if (expression->type == ExpressionType::Instruction) {
             auto *instruction = dynamic_cast<Instruction *>(expression.get());
             instruction->parsedOperands.clear();

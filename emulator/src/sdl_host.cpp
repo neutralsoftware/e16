@@ -14,12 +14,40 @@ constexpr std::uint16_t ButtonY = 1u << 7;
 constexpr std::uint16_t ButtonStart = 1u << 8;
 constexpr std::uint16_t ButtonSelect = 1u << 9;
 
-void setButton(std::uint16_t &pad, std::uint16_t bit, bool down) {
-    if (down) {
-        pad |= bit;
-    } else {
-        pad &= static_cast<std::uint16_t>(~bit);
-    }
+std::uint16_t keyboardPad0() {
+    const bool *keys = SDL_GetKeyboardState(nullptr);
+    std::uint16_t pad = 0;
+    pad |= keys[SDL_SCANCODE_RIGHT] ? ButtonRight : 0;
+    pad |= keys[SDL_SCANCODE_LEFT] ? ButtonLeft : 0;
+    pad |= keys[SDL_SCANCODE_DOWN] ? ButtonDown : 0;
+    pad |= keys[SDL_SCANCODE_UP] ? ButtonUp : 0;
+    pad |= keys[SDL_SCANCODE_Z] ? ButtonA : 0;
+    pad |= keys[SDL_SCANCODE_X] ? ButtonB : 0;
+    pad |= keys[SDL_SCANCODE_A] ? ButtonX : 0;
+    pad |= keys[SDL_SCANCODE_S] ? ButtonY : 0;
+    pad |= keys[SDL_SCANCODE_RETURN] ? ButtonStart : 0;
+    pad |= keys[SDL_SCANCODE_LSHIFT] ? ButtonSelect : 0;
+    return pad;
+}
+
+std::uint16_t keyboardPad1() {
+    const bool *keys = SDL_GetKeyboardState(nullptr);
+    std::uint16_t pad = 0;
+    pad |= keys[SDL_SCANCODE_L] ? ButtonRight : 0;
+    pad |= keys[SDL_SCANCODE_J] ? ButtonLeft : 0;
+    pad |= keys[SDL_SCANCODE_K] ? ButtonDown : 0;
+    pad |= keys[SDL_SCANCODE_I] ? ButtonUp : 0;
+    pad |= keys[SDL_SCANCODE_1] ? ButtonA : 0;
+    pad |= keys[SDL_SCANCODE_2] ? ButtonB : 0;
+    pad |= keys[SDL_SCANCODE_3] ? ButtonX : 0;
+    pad |= keys[SDL_SCANCODE_4] ? ButtonY : 0;
+    pad |= keys[SDL_SCANCODE_0] ? ButtonStart : 0;
+    pad |= keys[SDL_SCANCODE_RSHIFT] ? ButtonSelect : 0;
+    return pad;
+}
+
+bool escapePressed() {
+    return SDL_GetKeyboardState(nullptr)[SDL_SCANCODE_ESCAPE];
 }
 }
 
@@ -42,6 +70,8 @@ bool SdlHost::open(int scale, Apu &apu) {
         errorText = SDL_GetError();
         return false;
     }
+    SDL_SetWindowFocusable(window, true);
+    SDL_RaiseWindow(window);
     renderer = SDL_CreateRenderer(window, nullptr);
     if (!renderer) {
         errorText = SDL_GetError();
@@ -80,52 +110,27 @@ bool SdlHost::poll(Memory &memory) {
         if (event.type == SDL_EVENT_QUIT) {
             return false;
         }
-        if (event.type == SDL_EVENT_KEY_DOWN ||
-            event.type == SDL_EVENT_KEY_UP) {
-            bool down = event.type == SDL_EVENT_KEY_DOWN;
-            switch (event.key.key) {
-            case SDLK_RIGHT:
-                setButton(memory.inputPad0, ButtonRight, down);
-                break;
-            case SDLK_LEFT:
-                setButton(memory.inputPad0, ButtonLeft, down);
-                break;
-            case SDLK_DOWN:
-                setButton(memory.inputPad0, ButtonDown, down);
-                break;
-            case SDLK_UP:
-                setButton(memory.inputPad0, ButtonUp, down);
-                break;
-            case SDLK_Z:
-                setButton(memory.inputPad0, ButtonA, down);
-                break;
-            case SDLK_X:
-                setButton(memory.inputPad0, ButtonB, down);
-                break;
-            case SDLK_A:
-                setButton(memory.inputPad0, ButtonX, down);
-                break;
-            case SDLK_S:
-                setButton(memory.inputPad0, ButtonY, down);
-                break;
-            case SDLK_RETURN:
-                setButton(memory.inputPad0, ButtonStart, down);
-                break;
-            case SDLK_RSHIFT:
-            case SDLK_LSHIFT:
-                setButton(memory.inputPad0, ButtonSelect, down);
-                break;
-            case SDLK_ESCAPE:
-                if (down) {
-                    return false;
-                }
-                break;
-            default:
-                break;
-            }
-        }
     }
+    const bool *keys = SDL_GetKeyboardState(nullptr);
+    if (keys[SDL_SCANCODE_F1] && !controlsKeyDown) {
+        showControls();
+    }
+    controlsKeyDown = keys[SDL_SCANCODE_F1];
+    if (escapePressed()) {
+        return false;
+    }
+    memory.inputPad0 = keyboardPad0();
+    memory.inputPad1 = twoPlayerControls ? keyboardPad1() : 0;
     return true;
+}
+
+void SdlHost::enableTwoPlayerControls() {
+    if (twoPlayerControls) {
+        return;
+    }
+    twoPlayerControls = true;
+    SDL_SetWindowTitle(window, "Ember-16 — Two Player Controls Active");
+    showControls();
 }
 
 void SdlHost::present(const Flame &flame) {
@@ -138,6 +143,14 @@ void SdlHost::present(const Flame &flame) {
 
 const std::string &SdlHost::error() const {
     return errorText;
+}
+
+void SdlHost::showControls() const {
+    const char *message = twoPlayerControls
+                              ? "Player 1\nArrows: directions\nZ/X/A/S: A/B/X/Y\nEnter: Start   Left Shift: Select\n\nPlayer 2\nI/J/K/L: Up/Left/Down/Right\n1/2/3/4: A/B/X/Y\n0: Start   Right Shift: Select\n\nF1 opens this panel."
+                              : "Player 1\nArrows: directions\nZ/X/A/S: A/B/X/Y\nEnter: Start   Left Shift: Select\n\nPlayer 2 activates automatically when the game reads INPUT_PAD1.\n\nF1 opens this panel.";
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "Ember-16 Controls",
+                             message, window);
 }
 
 void SdlHost::close() {

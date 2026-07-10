@@ -8,6 +8,7 @@ E16 is a small toolchain for the Ember-16 virtual machine and assembly language.
 - `emulator/`: builds `e16emu`, an SDL3-based emulator for running compiled programs.
 - `disassembler/`: builds `e16dis`, a terminal disassembler for E16 binaries.
 - `converter/`: builds `e16img`, `e16spritepack`, and `e16tilemap` PNG asset converters.
+- `musicMaker/`: builds `e16musicmaker`, a six-channel APU tracker with live SDL3 preview, wavetable design, PCM recording, and callable `.e16` music export.
 - `tests/`: example `.e16` programs and assets.
 - `nvim/e16.nvim/`: Neovim filetype, syntax highlighting, and LSP support.
 
@@ -15,7 +16,7 @@ E16 is a small toolchain for the Ember-16 virtual machine and assembly language.
 
 - CMake 3.10 or newer
 - A C++20 compiler
-- SDL3 for the emulator
+- SDL3 for the emulator and music maker
 - zlib for the image converter
 - Python 3 for the Neovim LSP server
 
@@ -43,6 +44,9 @@ cmake --build assembler/build
 cmake -S emulator -B emulator/build
 cmake --build emulator/build
 
+cmake -S musicMaker -B musicMaker/build
+cmake --build musicMaker/build
+
 cmake -S disassembler -B disassembler/build
 cmake --build disassembler/build
 
@@ -54,6 +58,7 @@ The binaries are written to each build directory:
 
 - `assembler/build/e16asm`
 - `emulator/build/e16emu`
+- `musicMaker/build/e16musicmaker`
 - `disassembler/build/e16dis`
 - `converter/build/e16img`
 - `converter/build/e16spritepack`
@@ -78,6 +83,14 @@ Run with debugger mode enabled:
 ```sh
 emulator/build/e16emu -s tests/solid/main.bin
 ```
+
+Compose and export E16 music:
+
+```sh
+musicMaker/build/e16musicmaker
+```
+
+The exported assembly module provides `music_play`, `music_update`, and `music_stop`. Call `music_update` once per game frame after `music_play` so the song advances without blocking the game loop.
 
 Disassemble a binary:
 

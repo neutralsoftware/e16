@@ -24,6 +24,7 @@ class SdlHost {
 
     bool open(int scale, Apu &apu);
     bool poll(Memory &memory);
+    void enableTwoPlayerControls();
     void present(const Flame &flame);
     const std::string &error() const;
 
@@ -35,8 +36,11 @@ class SdlHost {
     Apu *apuDevice = nullptr;
     std::string errorText;
     std::vector<float> audioBuffer;
+    bool twoPlayerControls = false;
+    bool controlsKeyDown = false;
 
     void close();
+    void showControls() const;
     static void audioCallback(void *userdata, SDL_AudioStream *stream,
                               int additionalAmount, int totalAmount);
 };

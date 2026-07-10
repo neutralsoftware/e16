@@ -1,0 +1,1 @@
+/opt/homebrew/opt/llvm/bin/clang++  -arch arm64 -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/e16musicmaker.dir/src/app.cpp.o CMakeFiles/e16musicmaker.dir/src/audio.cpp.o CMakeFiles/e16musicmaker.dir/src/main.cpp.o CMakeFiles/e16musicmaker.dir/src/song.cpp.o -o e16musicmaker  -Wl,-rpath,/opt/homebrew/lib /opt/homebrew/lib/libSDL3.0.dylib

@@ -14,6 +14,9 @@
 .const BUTTON_DOWN, 0x04
 .const BUTTON_UP, 0x08
 
+.const PLAYER_X, 0x000200
+.const PLAYER_Y, 0x000202
+
 start:
     ; Black backdrop
     clr r0
@@ -34,11 +37,13 @@ fill_tile:
     bne fill_tile
 
     mov r0, 120
+    store @PLAYER_X, r0
     storeb @(SPRITECTRL_BASE + 0), r0
     clr r0
     storeb @(SPRITECTRL_BASE + 1), r0
 
     mov r0, 80
+    store @PLAYER_Y, r0
     storeb @(SPRITECTRL_BASE + 2), r0
     clr r0
     storeb @(SPRITECTRL_BASE + 3), r0
@@ -60,6 +65,8 @@ main_loop:
     wait
 
     load r0, @INPUT_PAD0
+    load r1, @PLAYER_X
+    load r2, @PLAYER_Y
 
     test r0, BUTTON_RIGHT
     bne move_right
@@ -76,25 +83,21 @@ main_loop:
     bra update_sprite
 
 move_right:
-    load r1, @player_x
     inc r1
     
     bra check_bounds
 
 move_left:
-    load r1, @player_x
     dec r1
     
     bra check_bounds
 
 move_down:
-    load r2, @player_y
     inc r2
     
     bra check_bounds
 
 move_up:
-    load r2, @player_y
     dec r2
 
     bra check_bounds
@@ -116,20 +119,12 @@ check_bounds:
 
 
 save_position:
-    store @player_x, r1
-    store @player_y, r2
+    store @PLAYER_X, r1
+    store @PLAYER_Y, r2
 
 update_sprite:
-    load r1, @player_x
     storeb @(SPRITECTRL_BASE + 0), r1
 
-    load r2, @player_y
     storeb @(SPRITECTRL_BASE + 2), r2
 
     bra main_loop
-
-player_x:
-    .word 120
-
-player_y:
-    .word 80

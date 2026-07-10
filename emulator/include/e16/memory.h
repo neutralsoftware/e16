@@ -24,6 +24,7 @@ class Memory {
     void write16(std::uint32_t address, std::uint16_t value);
     void write24(std::uint32_t address, std::uint32_t value);
     void requestDma();
+    bool consumeInputPad1Read();
 
     std::uint16_t inputPad0 = 0;
     std::uint16_t inputPad1 = 0;
@@ -33,6 +34,7 @@ class Memory {
     Apu &apuDevice;
     std::vector<std::uint8_t> bytes;
     std::array<std::uint8_t, 0x100> dma{};
+    mutable bool inputPad1Read = false;
 
     std::uint8_t readDma(std::uint32_t address) const;
     void writeDma(std::uint32_t address, std::uint8_t value);
