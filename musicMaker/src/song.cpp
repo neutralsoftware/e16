@@ -312,6 +312,15 @@ void replaceAll(std::string &value, const std::string &from,
         position += to.size();
     }
 }
+
+int stateBaseForPrefix(const std::string &prefix) {
+    std::uint32_t hash = 2166136261u;
+    for (unsigned char value : prefix) {
+        hash ^= value;
+        hash *= 16777619u;
+    }
+    return 0x000100 + static_cast<int>(hash % 32u) * 8;
+}
 }
 
 bool exportE16(const Song &song, const std::string &path, std::string &error) {
@@ -321,6 +330,7 @@ bool exportE16(const Song &song, const std::string &path, std::string &error) {
         return false;
     }
     std::ostringstream output;
+    std::string prefix = exportSymbolPrefix(path);
 
     output << ".const MUSIC_APU_CONTROL, 0xFF2000\n";
     output << ".const MUSIC_APU_MASTER_VOL, 0xFF2004\n";
@@ -335,7 +345,8 @@ bool exportE16(const Song &song, const std::string &path, std::string &error) {
     output << ".const MUSIC_WAVETABLE_LENGTH, " << WavetableSize << "\n";
     output << ".const MUSIC_PCM_LENGTH, " << song.pcmSample.size() << "\n";
     output << ".const MUSIC_PCM_RATE, " << PcmSampleRate << "\n";
-    output << ".const MUSIC_STATE_BASE, 0x000100\n";
+    output << ".const MUSIC_STATE_BASE, "
+           << hexadecimal(stateBaseForPrefix(prefix), 6) << "\n";
     output << ".const MUSIC_STEP_STATE, MUSIC_STATE_BASE\n";
     output << ".const MUSIC_WAIT_STATE, MUSIC_STATE_BASE + 2\n";
     output << ".const MUSIC_PLAYING_STATE, MUSIC_STATE_BASE + 4\n";
@@ -506,7 +517,6 @@ bool exportE16(const Song &song, const std::string &path, std::string &error) {
     output << "music_module_end:\n";
 
     std::string module = output.str();
-    std::string prefix = exportSymbolPrefix(path);
     replaceAll(module, "MUSIC_", prefix + "_");
     replaceAll(module, "music_", prefix + "_music_");
     file << module;
