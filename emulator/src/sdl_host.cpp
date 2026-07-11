@@ -1,5 +1,8 @@
 #include "e16/sdl_host.h"
 
+#include <algorithm>
+#include <cstdlib>
+
 namespace e16 {
 
 namespace {
@@ -49,7 +52,56 @@ std::uint16_t keyboardPad1() {
 bool escapePressed() {
     return SDL_GetKeyboardState(nullptr)[SDL_SCANCODE_ESCAPE];
 }
+
+std::uint16_t gamepadButtons(SDL_Gamepad *gamepad) {
+    if (!gamepad) {
+        return 0;
+    }
+
+    constexpr Sint16 AxisDeadZone = 12000;
+    std::uint16_t pad = 0;
+
+    const Sint16 leftX = SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFTX);
+    const Sint16 leftY = SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFTY);
+    const Sint16 rightX = SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHTX);
+    const Sint16 rightY = SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHTY);
+
+    pad |= (leftX > AxisDeadZone || rightX > AxisDeadZone) ? ButtonRight : 0;
+    pad |= (leftX < -AxisDeadZone || rightX < -AxisDeadZone) ? ButtonLeft : 0;
+    pad |= (leftY > AxisDeadZone || rightY > AxisDeadZone) ? ButtonDown : 0;
+    pad |= (leftY < -AxisDeadZone || rightY < -AxisDeadZone) ? ButtonUp : 0;
+
+    pad |= SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_RIGHT)
+               ? ButtonRight
+               : 0;
+    pad |= SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_LEFT)
+               ? ButtonLeft
+               : 0;
+    pad |= SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_DOWN)
+               ? ButtonDown
+               : 0;
+    pad |= SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_UP) ? ButtonUp
+                                                                     : 0;
+    pad |=
+        SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_SOUTH) ? ButtonA : 0;
+    pad |= SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_EAST) ? ButtonB : 0;
+    pad |= SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_WEST) ? ButtonX : 0;
+    pad |=
+        SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_NORTH) ? ButtonY : 0;
+    pad |= SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_START) ? ButtonStart
+                                                                   : 0;
+    pad |= SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_BACK) ? ButtonSelect
+                                                                  : 0;
+    pad |= SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER)
+               ? ButtonSelect
+               : 0;
+    pad |= SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER)
+               ? ButtonStart
+               : 0;
+
+    return pad;
 }
+} // namespace
 
 SdlHost::SdlHost() = default;
 
@@ -65,13 +117,14 @@ bool SdlHost::open(int scale, Apu &apu) {
         return false;
     }
     window = SDL_CreateWindow("Ember-16", ScreenWidth * scale,
-                              ScreenHeight * scale, 0);
+                              ScreenHeight * scale, SDL_WINDOW_FULLSCREEN);
     if (!window) {
         errorText = SDL_GetError();
         return false;
     }
     SDL_SetWindowFocusable(window, true);
     SDL_RaiseWindow(window);
+    openAvailableGamepads();
     renderer = SDL_CreateRenderer(window, nullptr);
     if (!renderer) {
         errorText = SDL_GetError();
@@ -110,6 +163,11 @@ bool SdlHost::poll(Memory &memory) {
         if (event.type == SDL_EVENT_QUIT) {
             return false;
         }
+        if (event.type == SDL_EVENT_GAMEPAD_ADDED) {
+            openGamepad(event.gdevice.which);
+        } else if (event.type == SDL_EVENT_GAMEPAD_REMOVED) {
+            closeGamepad(event.gdevice.which);
+        }
     }
     const bool *keys = SDL_GetKeyboardState(nullptr);
     if (keys[SDL_SCANCODE_F1] && !controlsKeyDown) {
@@ -119,8 +177,8 @@ bool SdlHost::poll(Memory &memory) {
     if (escapePressed()) {
         return false;
     }
-    memory.inputPad0 = keyboardPad0();
-    memory.inputPad1 = twoPlayerControls ? keyboardPad1() : 0;
+    memory.inputPad0 = keyboardPad0() | gamepadPad(0);
+    memory.inputPad1 = (twoPlayerControls ? keyboardPad1() : 0) | gamepadPad(1);
     return true;
 }
 
@@ -141,14 +199,22 @@ void SdlHost::present(const Flame &flame) {
     SDL_RenderPresent(renderer);
 }
 
-const std::string &SdlHost::error() const {
-    return errorText;
-}
+const std::string &SdlHost::error() const { return errorText; }
 
 void SdlHost::showControls() const {
-    const char *message = twoPlayerControls
-                              ? "Player 1\nArrows: directions\nZ/X/A/S: A/B/X/Y\nEnter: Start   Left Shift: Select\n\nPlayer 2\nI/J/K/L: Up/Left/Down/Right\n1/2/3/4: A/B/X/Y\n0: Start   Right Shift: Select\n\nF1 opens this panel."
-                              : "Player 1\nArrows: directions\nZ/X/A/S: A/B/X/Y\nEnter: Start   Left Shift: Select\n\nPlayer 2 activates automatically when the game reads INPUT_PAD1.\n\nF1 opens this panel.";
+    const char *message =
+        twoPlayerControls
+            ? "Player 1\nArrows or gamepad 1 sticks/D-pad: directions\nZ/X/A/S "
+              "or South/East/West/North: A/B/X/Y\nEnter/Start: Start   Left "
+              "Shift/Back: Select\n\nPlayer 2\nI/J/K/L or gamepad 2 "
+              "sticks/D-pad: directions\n1/2/3/4 or South/East/West/North: "
+              "A/B/X/Y\n0/Start: Start   Right Shift/Back: Select\n\nF1 opens "
+              "this panel."
+            : "Player 1\nArrows or gamepad 1 sticks/D-pad: directions\nZ/X/A/S "
+              "or South/East/West/North: A/B/X/Y\nEnter/Start: Start   Left "
+              "Shift/Back: Select\n\nPlayer 2 activates automatically when the "
+              "game reads INPUT_PAD1 or when a second gamepad is "
+              "connected.\n\nF1 opens this panel.";
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "Ember-16 Controls",
                              message, window);
 }
@@ -166,11 +232,70 @@ void SdlHost::close() {
         SDL_DestroyRenderer(renderer);
         renderer = nullptr;
     }
+    closeAllGamepads();
     if (window) {
         SDL_DestroyWindow(window);
         window = nullptr;
     }
     apuDevice = nullptr;
+}
+
+void SdlHost::openAvailableGamepads() {
+    int count = 0;
+    SDL_JoystickID *ids = SDL_GetGamepads(&count);
+    if (!ids) {
+        return;
+    }
+    for (int i = 0; i < count; i++) {
+        openGamepad(ids[i]);
+    }
+    SDL_free(ids);
+}
+
+void SdlHost::openGamepad(SDL_JoystickID instanceId) {
+    auto existing = std::find_if(gamepads.begin(), gamepads.end(),
+                                 [instanceId](const GamepadSlot &slot) {
+                                     return slot.instanceId == instanceId;
+                                 });
+    if (existing != gamepads.end() || gamepads.size() >= 2 ||
+        !SDL_IsGamepad(instanceId)) {
+        return;
+    }
+
+    SDL_Gamepad *gamepad = SDL_OpenGamepad(instanceId);
+    if (!gamepad) {
+        return;
+    }
+    gamepads.push_back({instanceId, gamepad});
+    if (gamepads.size() > 1) {
+        enableTwoPlayerControls();
+    }
+}
+
+void SdlHost::closeGamepad(SDL_JoystickID instanceId) {
+    auto removed = std::remove_if(gamepads.begin(), gamepads.end(),
+                                  [instanceId](GamepadSlot &slot) {
+                                      if (slot.instanceId != instanceId) {
+                                          return false;
+                                      }
+                                      SDL_CloseGamepad(slot.gamepad);
+                                      return true;
+                                  });
+    gamepads.erase(removed, gamepads.end());
+}
+
+void SdlHost::closeAllGamepads() {
+    for (GamepadSlot &slot : gamepads) {
+        SDL_CloseGamepad(slot.gamepad);
+    }
+    gamepads.clear();
+}
+
+std::uint16_t SdlHost::gamepadPad(std::size_t player) const {
+    if (player >= gamepads.size()) {
+        return 0;
+    }
+    return gamepadButtons(gamepads[player].gamepad);
 }
 
 void SdlHost::audioCallback(void *userdata, SDL_AudioStream *stream,
@@ -191,4 +316,4 @@ void SdlHost::audioCallback(void *userdata, SDL_AudioStream *stream,
         static_cast<int>(host->audioBuffer.size() * sizeof(float)));
 }
 
-}
+} // namespace e16

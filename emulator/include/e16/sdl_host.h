@@ -35,16 +35,27 @@ class SdlHost {
     SDL_AudioStream *audio = nullptr;
     Apu *apuDevice = nullptr;
     std::string errorText;
+    struct GamepadSlot {
+        SDL_JoystickID instanceId = 0;
+        SDL_Gamepad *gamepad = nullptr;
+    };
+
     std::vector<float> audioBuffer;
+    std::vector<GamepadSlot> gamepads;
     bool twoPlayerControls = false;
     bool controlsKeyDown = false;
 
     void close();
     void showControls() const;
+    void openAvailableGamepads();
+    void openGamepad(SDL_JoystickID instanceId);
+    void closeGamepad(SDL_JoystickID instanceId);
+    void closeAllGamepads();
+    std::uint16_t gamepadPad(std::size_t player) const;
     static void audioCallback(void *userdata, SDL_AudioStream *stream,
                               int additionalAmount, int totalAmount);
 };
 
-}
+} // namespace e16
 
 #endif
