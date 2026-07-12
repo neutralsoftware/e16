@@ -143,8 +143,10 @@ usage: e16emu [-s] [--headless] [--load-address addr] [--scale n] program.bin
 - `-s`: enable debugger mode.
 - `--headless`: run without creating a window, including on Linux systems without a desktop environment.
 - `--load-address`: choose where the binary is loaded.
-- `--scale`: choose a positive integer pixel magnification. The fixed window remains exactly `320 × scale` by `180 × scale` and cannot be stretched.
-- If SDL cannot create a video device or window, the emulator automatically continues headless.
+- `--scale`: set the initial emulator display scale.
+- The emulator opens fullscreen by default and letterboxes the 320x180 display.
+- If SDL cannot initialize graphical output, the emulator reports the SDL error and exits.
+- If a Mesa OpenGL version override is inherited, the emulator uses SDL's software renderer to avoid incompatible OpenGL contexts.
 - The graphical emulator uses nearest-neighbor presentation, hides the cursor, and never opens modal SDL message boxes.
 - Gamepads are supported for up to two players. D-pads and left sticks map to directions; South/East/West/North map to A/B/X/Y; Start maps to Start; Back maps to Select.
 - Escape or Back+Start / Minus+Plus exits the emulator.

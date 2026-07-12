@@ -135,38 +135,40 @@ bool SdlHost::open(int scale, Apu &apu, bool forceHeadless) {
         return true;
     }
     if (!SDL_InitSubSystem(SDL_INIT_VIDEO)) {
-        headless = true;
-        return true;
+        errorText = SDL_GetError();
+        return false;
     }
     window = SDL_CreateWindow("Ember-16", ScreenWidth * scale,
-                              ScreenHeight * scale, 0);
+                              ScreenHeight * scale, SDL_WINDOW_FULLSCREEN);
     if (!window) {
-        headless = true;
-        return true;
+        errorText = SDL_GetError();
+        return false;
     }
-    SDL_SetWindowMinimumSize(window, ScreenWidth * scale, ScreenHeight * scale);
-    SDL_SetWindowMaximumSize(window, ScreenWidth * scale, ScreenHeight * scale);
     SDL_SetWindowFocusable(window, true);
     SDL_RaiseWindow(window);
     SDL_HideCursor();
     cursorHidden = true;
-    renderer = SDL_CreateRenderer(window, nullptr);
+    const char *rendererName =
+        std::getenv("MESA_GL_VERSION_OVERRIDE") ? "software" : nullptr;
+    renderer = SDL_CreateRenderer(window, rendererName);
     if (!renderer) {
+        errorText = SDL_GetError();
         SDL_DestroyWindow(window);
         window = nullptr;
-        headless = true;
-        return true;
+        return false;
     }
+    SDL_SetRenderLogicalPresentation(renderer, ScreenWidth, ScreenHeight,
+                                     SDL_LOGICAL_PRESENTATION_LETTERBOX);
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
                                 SDL_TEXTUREACCESS_STREAMING, ScreenWidth,
                                 ScreenHeight);
     if (!texture) {
+        errorText = SDL_GetError();
         SDL_DestroyRenderer(renderer);
         SDL_DestroyWindow(window);
         renderer = nullptr;
         window = nullptr;
-        headless = true;
-        return true;
+        return false;
     }
     SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
     return true;
