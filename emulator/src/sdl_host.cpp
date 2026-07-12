@@ -142,6 +142,36 @@ bool SdlHost::open(int scale, Apu &apu, bool forceHeadless) {
             " SDL_RENDER_DRIVER=" + environmentValue("SDL_RENDER_DRIVER") +
             " MESA_GL_VERSION_OVERRIDE=" +
             environmentValue("MESA_GL_VERSION_OVERRIDE"));
+    bool kmsDrmAvailable = false;
+    bool firstVideoDriver = true;
+    std::ostringstream videoDrivers;
+    for (int i = 0; i < SDL_GetNumVideoDrivers(); i++) {
+        const char *driver = SDL_GetVideoDriver(i);
+        if (!driver) {
+            continue;
+        }
+        if (!firstVideoDriver) {
+            videoDrivers << ',';
+        }
+        firstVideoDriver = false;
+        videoDrivers << driver;
+        if (std::string(driver) == "kmsdrm") {
+            kmsDrmAvailable = true;
+        }
+    }
+    logInfo("available video drivers: " + videoDrivers.str());
+    const bool directConsole =
+        environmentValue("XDG_SESSION_TYPE") == "tty" &&
+        environmentValue("WAYLAND_DISPLAY") == "<unset>" &&
+        environmentValue("DISPLAY") == "<unset>";
+    SDL_Environment *processEnvironment = SDL_GetEnvironment();
+    if (directConsole && kmsDrmAvailable && processEnvironment &&
+        environmentValue("SDL_VIDEO_DRIVER") == "<unset>") {
+        if (SDL_SetEnvironmentVariable(processEnvironment, "SDL_VIDEO_DRIVER",
+                                       "kmsdrm", false)) {
+            logInfo("direct console detected, selecting kmsdrm");
+        }
+    }
     apuDevice = &apu;
     headless = forceHeadless;
     if (!SDL_Init(SDL_INIT_EVENTS)) {
@@ -188,6 +218,11 @@ bool SdlHost::open(int scale, Apu &apu, bool forceHeadless) {
         std::string forcedDriver = forcedValue ? forcedValue : "";
         if (forcedDriver.empty()) {
             errorText = firstError;
+            if (directConsole && !kmsDrmAvailable) {
+                errorText +=
+                    "; SDL3 was built without the kmsdrm video driver and no "
+                    "X11 or Wayland display is available";
+            }
             return false;
         }
         logInfo("video driver " + forcedDriver + " failed: " + firstError);
@@ -200,6 +235,11 @@ bool SdlHost::open(int scale, Apu &apu, bool forceHeadless) {
         if (!initialized) {
             errorText =
                 firstError + "; automatic fallback failed: " + fallbackError;
+            if (directConsole && forcedDriver == "kmsdrm") {
+                errorText +=
+                    "; kmsdrm requires DRM master access, working /dev/dri "
+                    "permissions, and ES-DE deinitialization before launch";
+            }
             return false;
         }
     }
