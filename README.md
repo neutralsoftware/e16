@@ -142,7 +142,9 @@ usage: e16emu [-s] [--load-address addr] [--scale n] program.bin
 
 - `-s`: enable debugger mode.
 - `--load-address`: choose where the binary is loaded.
-- `--scale`: set the emulator display scale.
+- `--scale`: set the emulator display scale used when SDL creates the fullscreen window.
+- The emulator opens fullscreen by default and letterboxes the 320x180 display.
+- Gamepads are supported for up to two players. D-pads and left/right sticks map to directions; South/East/West/North map to A/B/X/Y; Start/Right Shoulder map to Start; Back/Left Shoulder map to Select.
 
 ### `e16dis`
 
