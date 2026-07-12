@@ -53,6 +53,12 @@ bool escapePressed() {
     return SDL_GetKeyboardState(nullptr)[SDL_SCANCODE_ESCAPE];
 }
 
+bool exitPressed(SDL_Gamepad *gamepad) {
+    return gamepad &&
+           SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_BACK) &&
+           SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_START);
+}
+
 std::uint16_t gamepadButtons(SDL_Gamepad *gamepad) {
     if (!gamepad) {
         return 0;
@@ -177,6 +183,11 @@ bool SdlHost::poll(Memory &memory) {
     if (escapePressed()) {
         return false;
     }
+    for (const GamepadSlot &slot : gamepads) {
+        if (exitPressed(slot.gamepad)) {
+            return false;
+        }
+    }
     memory.inputPad0 = keyboardPad0() | gamepadPad(0);
     memory.inputPad1 = (twoPlayerControls ? keyboardPad1() : 0) | gamepadPad(1);
     return true;
@@ -216,12 +227,13 @@ void SdlHost::showControls() const {
               "Shift/Back: Select\n\nPlayer 2\nI/J/K/L or gamepad 2 "
               "sticks/D-pad: directions\n1/2/3/4 or South/East/West/North: "
               "A/B/X/Y\n0/Start: Start   Right Shift/Back: Select\n\nF1 opens "
-              "this panel."
+              "this panel. Escape or Select+Start / Minus+Plus exits."
             : "Player 1\nArrows or gamepad 1 sticks/D-pad: directions\nZ/X/A/S "
               "or South/East/West/North: A/B/X/Y\nEnter/Start: Start   Left "
               "Shift/Back: Select\n\nPlayer 2 activates automatically when the "
               "game reads INPUT_PAD1 or when a second gamepad is "
-              "connected.\n\nF1 opens this panel.";
+              "connected.\n\nF1 opens this panel. Escape or Select+Start / "
+              "Minus+Plus exits.";
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "Ember-16 Controls",
                              message, window);
 }
