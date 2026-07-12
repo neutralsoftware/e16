@@ -19,6 +19,7 @@ struct EmulatorOptions {
     int scale = 4;
     bool debug = false;
     bool headless = false;
+    bool windowed = false;
 };
 
 class Emulator {

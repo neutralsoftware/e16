@@ -123,7 +123,7 @@ SdlHost::~SdlHost() {
     SDL_Quit();
 }
 
-bool SdlHost::open(int scale, Apu &apu, bool forceHeadless) {
+bool SdlHost::open(int scale, Apu &apu, bool forceHeadless, bool windowed) {
     SDL_SetLogOutputFunction(sdlLog, nullptr);
     int version = SDL_GetVersion();
     std::ostringstream versionText;
@@ -142,7 +142,6 @@ bool SdlHost::open(int scale, Apu &apu, bool forceHeadless) {
             " SDL_RENDER_DRIVER=" + environmentValue("SDL_RENDER_DRIVER") +
             " MESA_GL_VERSION_OVERRIDE=" +
             environmentValue("MESA_GL_VERSION_OVERRIDE"));
-    bool kmsDrmAvailable = false;
     bool firstVideoDriver = true;
     std::ostringstream videoDrivers;
     for (int i = 0; i < SDL_GetNumVideoDrivers(); i++) {
@@ -155,21 +154,15 @@ bool SdlHost::open(int scale, Apu &apu, bool forceHeadless) {
         }
         firstVideoDriver = false;
         videoDrivers << driver;
-        if (std::string(driver) == "kmsdrm") {
-            kmsDrmAvailable = true;
-        }
     }
     logInfo("available video drivers: " + videoDrivers.str());
-    const bool directConsole =
-        environmentValue("XDG_SESSION_TYPE") == "tty" &&
-        environmentValue("WAYLAND_DISPLAY") == "<unset>" &&
-        environmentValue("DISPLAY") == "<unset>";
     SDL_Environment *processEnvironment = SDL_GetEnvironment();
-    if (directConsole && kmsDrmAvailable && processEnvironment &&
-        environmentValue("SDL_VIDEO_DRIVER") == "<unset>") {
+    std::string display = environmentValue("DISPLAY");
+    const bool x11Available = display != "<unset>" && !display.empty();
+    if (x11Available && processEnvironment) {
         if (SDL_SetEnvironmentVariable(processEnvironment, "SDL_VIDEO_DRIVER",
-                                       "kmsdrm", false)) {
-            logInfo("direct console detected, selecting kmsdrm");
+                                       "x11", true)) {
+            logInfo("X11 display detected, selecting x11");
         }
     }
     apuDevice = &apu;
@@ -206,42 +199,13 @@ bool SdlHost::open(int scale, Apu &apu, bool forceHeadless) {
     if (headless) {
         return true;
     }
+    if (!x11Available) {
+        errorText = "X11 is unavailable because DISPLAY is not set";
+        return false;
+    }
     if (!SDL_InitSubSystem(SDL_INIT_VIDEO)) {
-        std::string firstError = SDL_GetError();
-        SDL_Environment *environment = SDL_GetEnvironment();
-        if (!environment) {
-            errorText = firstError;
-            return false;
-        }
-        const char *forcedValue =
-            SDL_GetEnvironmentVariable(environment, "SDL_VIDEO_DRIVER");
-        std::string forcedDriver = forcedValue ? forcedValue : "";
-        if (forcedDriver.empty()) {
-            errorText = firstError;
-            if (directConsole && !kmsDrmAvailable) {
-                errorText +=
-                    "; SDL3 was built without the kmsdrm video driver and no "
-                    "X11 or Wayland display is available";
-            }
-            return false;
-        }
-        logInfo("video driver " + forcedDriver + " failed: " + firstError);
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        SDL_UnsetEnvironmentVariable(environment, "SDL_VIDEO_DRIVER");
-        bool initialized = SDL_InitSubSystem(SDL_INIT_VIDEO);
-        std::string fallbackError = initialized ? "" : SDL_GetError();
-        SDL_SetEnvironmentVariable(environment, "SDL_VIDEO_DRIVER",
-                                   forcedDriver.c_str(), true);
-        if (!initialized) {
-            errorText =
-                firstError + "; automatic fallback failed: " + fallbackError;
-            if (directConsole && forcedDriver == "kmsdrm") {
-                errorText +=
-                    "; kmsdrm requires DRM master access, working /dev/dri "
-                    "permissions, and ES-DE deinitialization before launch";
-            }
-            return false;
-        }
+        errorText = SDL_GetError();
+        return false;
     }
     const char *videoDriver = SDL_GetCurrentVideoDriver();
     logInfo("video driver: " +
@@ -254,8 +218,10 @@ bool SdlHost::open(int scale, Apu &apu, bool forceHeadless) {
     }
     SDL_SetWindowFocusable(window, true);
     SDL_RaiseWindow(window);
-    SDL_HideCursor();
-    cursorHidden = true;
+    if (!windowed) {
+        SDL_HideCursor();
+        cursorHidden = true;
+    }
     const bool mesaOverride =
         environmentValue("MESA_GL_VERSION_OVERRIDE") != "<unset>";
     if (mesaOverride) {
@@ -294,7 +260,9 @@ bool SdlHost::open(int scale, Apu &apu, bool forceHeadless) {
             return false;
         }
     }
-    if (!SDL_SetWindowFullscreen(window, true)) {
+    if (windowed) {
+        logInfo("windowed mode active");
+    } else if (!SDL_SetWindowFullscreen(window, true)) {
         logInfo("fullscreen unavailable, continuing windowed: " +
                 std::string(SDL_GetError()));
     } else if (!SDL_SyncWindow(window)) {

@@ -22,7 +22,7 @@ class SdlHost {
     SdlHost();
     ~SdlHost();
 
-    bool open(int scale, Apu &apu, bool forceHeadless);
+    bool open(int scale, Apu &apu, bool forceHeadless, bool windowed);
     bool poll(Memory &memory);
     void enableTwoPlayerControls();
     bool present(const Flame &flame);

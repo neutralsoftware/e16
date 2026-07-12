@@ -137,19 +137,20 @@ Usage: e16asm [--base address] [-o output.bin] [--print-ast] file.e16
 ### `e16emu`
 
 ```text
-usage: e16emu [-s] [--headless] [--load-address addr] [--scale n] program.bin
+usage: e16emu [-s] [-w] [--headless] [--load-address addr] [--scale n] program.bin
 ```
 
 - `-s`: enable debugger mode.
+- `-w`: run in a window and leave the cursor visible.
 - `--headless`: run without creating a window, including on Linux systems without a desktop environment.
 - `--load-address`: choose where the binary is loaded.
 - `--scale`: set the initial emulator display scale.
 - The emulator opens fullscreen by default and letterboxes the 320x180 display.
 - If SDL cannot initialize graphical output, the emulator reports the SDL error and exits.
 - If a Mesa OpenGL version override is inherited, the emulator uses SDL's software renderer to avoid incompatible OpenGL contexts.
-- On a direct Linux console without X11 or Wayland, the emulator automatically selects SDL3's `kmsdrm` backend when it is available. Console execution requires an SDL3 build with KMSDRM support and exclusive DRM access while the game is running.
+- On Linux, the emulator selects SDL3's `x11` backend when `DISPLAY` is available. It does not automatically use direct KMSDRM access.
 - Every launch writes a fresh diagnostic log to the platform temporary directory (`/tmp/e16.log` on Linux), including the SDL version, display environment, selected video and render drivers, fallback decisions, runtime faults, fatal exceptions, signals, and the final exit code.
-- Gamepad and audio initialization failures do not prevent graphical execution. Invalid forced SDL video drivers, failed accelerated renderers, unavailable fullscreen modes, and presentation failures automatically use safe fallbacks where possible.
+- Gamepad and audio initialization failures do not prevent graphical execution. Failed accelerated renderers, unavailable fullscreen modes, and presentation failures automatically use safe fallbacks where possible.
 - The graphical emulator uses nearest-neighbor presentation, hides the cursor, and never opens modal SDL message boxes.
 - Gamepads are supported for up to two players. D-pads and left sticks map to directions; South/East/West/North map to A/B/X/Y; Start maps to Start; Back maps to Select.
 - Escape or Back+Start / Minus+Plus exits the emulator.
