@@ -22,12 +22,12 @@ class SdlHost {
     SdlHost();
     ~SdlHost();
 
-    bool open(int scale, Apu &apu);
+    bool open(int scale, Apu &apu, bool forceHeadless);
     bool poll(Memory &memory);
     void enableTwoPlayerControls();
-    void showSaveRamNotice(const std::string &path) const;
     void present(const Flame &flame);
     const std::string &error() const;
+    bool isHeadless() const;
 
   private:
     SDL_Window *window = nullptr;
@@ -44,10 +44,10 @@ class SdlHost {
     std::vector<float> audioBuffer;
     std::vector<GamepadSlot> gamepads;
     bool twoPlayerControls = false;
-    bool controlsKeyDown = false;
+    bool headless = false;
+    bool cursorHidden = false;
 
     void close();
-    void showControls() const;
     void openAvailableGamepads();
     void openGamepad(SDL_JoystickID instanceId);
     void closeGamepad(SDL_JoystickID instanceId);

@@ -3,11 +3,13 @@
 
 #include <exception>
 #include <iostream>
+#include <stdexcept>
 
 namespace {
 
 void usage() {
-    std::cerr << "usage: e16emu [-s] [--load-address addr] [--scale n] program.bin\n";
+    std::cerr << "usage: e16emu [-s] [--headless] [--load-address addr] "
+                 "[--scale n] program.bin\n";
 }
 
 }
@@ -19,10 +21,15 @@ int main(int argc, char **argv) {
         std::string arg = argv[i];
         if (arg == "-s") {
             options.debug = true;
+        } else if (arg == "--headless") {
+            options.headless = true;
         } else if (arg == "--load-address" && i + 1 < argc) {
             options.loadAddress = e16::parseNumber(argv[++i]);
         } else if (arg == "--scale" && i + 1 < argc) {
             options.scale = std::stoi(argv[++i]);
+            if (options.scale < 1) {
+                throw std::invalid_argument("scale must be at least 1");
+            }
         } else if (arg == "-h" || arg == "--help") {
             usage();
             return 0;

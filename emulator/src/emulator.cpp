@@ -59,9 +59,12 @@ int Emulator::run() {
     memory.configureSaveRam(savePath);
     cpu.reset(BiosRomBase);
 
-    if (!sdl.open(options.scale, apu)) {
+    if (!sdl.open(options.scale, apu, options.headless)) {
         std::cerr << "SDL: " << sdl.error() << "\n";
         return 1;
+    }
+    if (sdl.isHeadless()) {
+        std::cerr << "e16emu: running headless\n";
     }
 
     bool running = true;
@@ -80,7 +83,7 @@ int Emulator::run() {
 
         runFrame();
         if (memory.consumeSaveRamFirstWrite()) {
-            sdl.showSaveRamNotice(savePath);
+            std::cerr << "e16emu: save RAM: " << savePath << "\n";
         }
         memory.flushSaveRam();
         if (memory.consumeInputPad1Read()) {

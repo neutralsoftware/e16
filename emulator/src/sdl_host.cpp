@@ -64,30 +64,29 @@ std::uint16_t gamepadButtons(SDL_Gamepad *gamepad) {
         return 0;
     }
 
-    constexpr Sint16 AxisDeadZone = 12000;
+    constexpr Sint16 AxisDeadZone = 18000;
     std::uint16_t pad = 0;
 
     const Sint16 leftX = SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFTX);
     const Sint16 leftY = SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFTY);
-    const Sint16 rightX = SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHTX);
-    const Sint16 rightY = SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHTY);
 
-    pad |= (leftX > AxisDeadZone || rightX > AxisDeadZone) ? ButtonRight : 0;
-    pad |= (leftX < -AxisDeadZone || rightX < -AxisDeadZone) ? ButtonLeft : 0;
-    pad |= (leftY > AxisDeadZone || rightY > AxisDeadZone) ? ButtonDown : 0;
-    pad |= (leftY < -AxisDeadZone || rightY < -AxisDeadZone) ? ButtonUp : 0;
+    const bool right = leftX > AxisDeadZone ||
+                       SDL_GetGamepadButton(
+                           gamepad, SDL_GAMEPAD_BUTTON_DPAD_RIGHT);
+    const bool left = leftX < -AxisDeadZone ||
+                      SDL_GetGamepadButton(
+                          gamepad, SDL_GAMEPAD_BUTTON_DPAD_LEFT);
+    const bool down = leftY > AxisDeadZone ||
+                      SDL_GetGamepadButton(
+                          gamepad, SDL_GAMEPAD_BUTTON_DPAD_DOWN);
+    const bool up = leftY < -AxisDeadZone ||
+                    SDL_GetGamepadButton(gamepad,
+                                         SDL_GAMEPAD_BUTTON_DPAD_UP);
 
-    pad |= SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_RIGHT)
-               ? ButtonRight
-               : 0;
-    pad |= SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_LEFT)
-               ? ButtonLeft
-               : 0;
-    pad |= SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_DOWN)
-               ? ButtonDown
-               : 0;
-    pad |= SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_UP) ? ButtonUp
-                                                                     : 0;
+    pad |= right && !left ? ButtonRight : 0;
+    pad |= left && !right ? ButtonLeft : 0;
+    pad |= down && !up ? ButtonDown : 0;
+    pad |= up && !down ? ButtonUp : 0;
     pad |=
         SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_SOUTH) ? ButtonA : 0;
     pad |= SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_EAST) ? ButtonB : 0;
@@ -98,12 +97,6 @@ std::uint16_t gamepadButtons(SDL_Gamepad *gamepad) {
                                                                    : 0;
     pad |= SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_BACK) ? ButtonSelect
                                                                   : 0;
-    pad |= SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER)
-               ? ButtonSelect
-               : 0;
-    pad |= SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER)
-               ? ButtonStart
-               : 0;
 
     return pad;
 }
@@ -116,50 +109,66 @@ SdlHost::~SdlHost() {
     SDL_Quit();
 }
 
-bool SdlHost::open(int scale, Apu &apu) {
+bool SdlHost::open(int scale, Apu &apu, bool forceHeadless) {
     apuDevice = &apu;
-    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD | SDL_INIT_AUDIO)) {
+    headless = forceHeadless;
+    if (!SDL_Init(SDL_INIT_EVENTS | SDL_INIT_GAMEPAD)) {
         errorText = SDL_GetError();
         return false;
+    }
+    openAvailableGamepads();
+
+    if (SDL_InitSubSystem(SDL_INIT_AUDIO)) {
+        SDL_AudioSpec spec{};
+        spec.format = SDL_AUDIO_F32;
+        spec.channels = 2;
+        spec.freq = ApuSampleRate;
+        audio = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,
+                                          &spec, audioCallback, this);
+        if (audio && !SDL_ResumeAudioStreamDevice(audio)) {
+            SDL_DestroyAudioStream(audio);
+            audio = nullptr;
+        }
+    }
+
+    if (headless) {
+        return true;
+    }
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO)) {
+        headless = true;
+        return true;
     }
     window = SDL_CreateWindow("Ember-16", ScreenWidth * scale,
-                              ScreenHeight * scale, SDL_WINDOW_FULLSCREEN);
+                              ScreenHeight * scale, 0);
     if (!window) {
-        errorText = SDL_GetError();
-        return false;
+        headless = true;
+        return true;
     }
+    SDL_SetWindowMinimumSize(window, ScreenWidth * scale, ScreenHeight * scale);
+    SDL_SetWindowMaximumSize(window, ScreenWidth * scale, ScreenHeight * scale);
     SDL_SetWindowFocusable(window, true);
     SDL_RaiseWindow(window);
-    openAvailableGamepads();
+    SDL_HideCursor();
+    cursorHidden = true;
     renderer = SDL_CreateRenderer(window, nullptr);
     if (!renderer) {
-        errorText = SDL_GetError();
-        return false;
+        SDL_DestroyWindow(window);
+        window = nullptr;
+        headless = true;
+        return true;
     }
-    SDL_SetRenderLogicalPresentation(renderer, ScreenWidth, ScreenHeight,
-                                     SDL_LOGICAL_PRESENTATION_LETTERBOX);
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
                                 SDL_TEXTUREACCESS_STREAMING, ScreenWidth,
                                 ScreenHeight);
     if (!texture) {
-        errorText = SDL_GetError();
-        return false;
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        renderer = nullptr;
+        window = nullptr;
+        headless = true;
+        return true;
     }
     SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
-    SDL_AudioSpec spec{};
-    spec.format = SDL_AUDIO_F32;
-    spec.channels = 2;
-    spec.freq = ApuSampleRate;
-    audio = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec,
-                                      audioCallback, this);
-    if (!audio) {
-        errorText = SDL_GetError();
-        return false;
-    }
-    if (!SDL_ResumeAudioStreamDevice(audio)) {
-        errorText = SDL_GetError();
-        return false;
-    }
     return true;
 }
 
@@ -175,12 +184,7 @@ bool SdlHost::poll(Memory &memory) {
             closeGamepad(event.gdevice.which);
         }
     }
-    const bool *keys = SDL_GetKeyboardState(nullptr);
-    if (keys[SDL_SCANCODE_F1] && !controlsKeyDown) {
-        showControls();
-    }
-    controlsKeyDown = keys[SDL_SCANCODE_F1];
-    if (escapePressed()) {
+    if (!headless && escapePressed()) {
         return false;
     }
     for (const GamepadSlot &slot : gamepads) {
@@ -188,8 +192,9 @@ bool SdlHost::poll(Memory &memory) {
             return false;
         }
     }
-    memory.inputPad0 = keyboardPad0() | gamepadPad(0);
-    memory.inputPad1 = (twoPlayerControls ? keyboardPad1() : 0) | gamepadPad(1);
+    memory.inputPad0 = (headless ? 0 : keyboardPad0()) | gamepadPad(0);
+    memory.inputPad1 =
+        (headless || !twoPlayerControls ? 0 : keyboardPad1()) | gamepadPad(1);
     return true;
 }
 
@@ -198,18 +203,12 @@ void SdlHost::enableTwoPlayerControls() {
         return;
     }
     twoPlayerControls = true;
-    SDL_SetWindowTitle(window, "Ember-16 — Two Player Controls Active");
-    showControls();
-}
-
-void SdlHost::showSaveRamNotice(const std::string &path) const {
-    std::string message =
-        "This game wrote to save RAM. Its data will be stored at:\n\n" + path;
-    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "Ember-16 Save Data",
-                             message.c_str(), window);
 }
 
 void SdlHost::present(const Flame &flame) {
+    if (headless) {
+        return;
+    }
     const auto &fb = flame.framebuffer();
     SDL_UpdateTexture(texture, nullptr, fb.data(), ScreenWidth * 4);
     SDL_RenderClear(renderer);
@@ -219,24 +218,7 @@ void SdlHost::present(const Flame &flame) {
 
 const std::string &SdlHost::error() const { return errorText; }
 
-void SdlHost::showControls() const {
-    const char *message =
-        twoPlayerControls
-            ? "Player 1\nArrows or gamepad 1 sticks/D-pad: directions\nZ/X/A/S "
-              "or South/East/West/North: A/B/X/Y\nEnter/Start: Start   Left "
-              "Shift/Back: Select\n\nPlayer 2\nI/J/K/L or gamepad 2 "
-              "sticks/D-pad: directions\n1/2/3/4 or South/East/West/North: "
-              "A/B/X/Y\n0/Start: Start   Right Shift/Back: Select\n\nF1 opens "
-              "this panel. Escape or Select+Start / Minus+Plus exits."
-            : "Player 1\nArrows or gamepad 1 sticks/D-pad: directions\nZ/X/A/S "
-              "or South/East/West/North: A/B/X/Y\nEnter/Start: Start   Left "
-              "Shift/Back: Select\n\nPlayer 2 activates automatically when the "
-              "game reads INPUT_PAD1 or when a second gamepad is "
-              "connected.\n\nF1 opens this panel. Escape or Select+Start / "
-              "Minus+Plus exits.";
-    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "Ember-16 Controls",
-                             message, window);
-}
+bool SdlHost::isHeadless() const { return headless; }
 
 void SdlHost::close() {
     if (audio) {
@@ -255,6 +237,10 @@ void SdlHost::close() {
     if (window) {
         SDL_DestroyWindow(window);
         window = nullptr;
+    }
+    if (cursorHidden) {
+        SDL_ShowCursor();
+        cursorHidden = false;
     }
     apuDevice = nullptr;
 }

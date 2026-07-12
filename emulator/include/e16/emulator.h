@@ -18,6 +18,7 @@ struct EmulatorOptions {
     std::uint32_t loadAddress = DefaultLoadAddress;
     int scale = 4;
     bool debug = false;
+    bool headless = false;
 };
 
 class Emulator {

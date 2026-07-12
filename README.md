@@ -137,14 +137,17 @@ Usage: e16asm [--base address] [-o output.bin] [--print-ast] file.e16
 ### `e16emu`
 
 ```text
-usage: e16emu [-s] [--load-address addr] [--scale n] program.bin
+usage: e16emu [-s] [--headless] [--load-address addr] [--scale n] program.bin
 ```
 
 - `-s`: enable debugger mode.
+- `--headless`: run without creating a window, including on Linux systems without a desktop environment.
 - `--load-address`: choose where the binary is loaded.
-- `--scale`: set the emulator display scale used when SDL creates the fullscreen window.
-- The emulator opens fullscreen by default and letterboxes the 320x180 display.
-- Gamepads are supported for up to two players. D-pads and left/right sticks map to directions; South/East/West/North map to A/B/X/Y; Start/Right Shoulder map to Start; Back/Left Shoulder map to Select.
+- `--scale`: choose a positive integer pixel magnification. The fixed window remains exactly `320 × scale` by `180 × scale` and cannot be stretched.
+- If SDL cannot create a video device or window, the emulator automatically continues headless.
+- The graphical emulator uses nearest-neighbor presentation, hides the cursor, and never opens modal SDL message boxes.
+- Gamepads are supported for up to two players. D-pads and left sticks map to directions; South/East/West/North map to A/B/X/Y; Start maps to Start; Back maps to Select.
+- Escape or Back+Start / Minus+Plus exits the emulator.
 
 ### `e16dis`
 
