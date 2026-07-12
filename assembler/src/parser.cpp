@@ -429,6 +429,59 @@ std::vector<ExprToken> tokenizeExpression(const std::string &text) {
             tokens.push_back({ExprTokenType::Number, text.substr(start, i - start)});
             continue;
         }
+        if (text[i] == '\'') {
+            i++;
+            if (i >= text.length()) {
+                throw std::invalid_argument("Unterminated character literal");
+            }
+            if (text[i] == '\'') {
+                throw std::invalid_argument("Empty character literal");
+            }
+
+            unsigned char value = 0;
+            if (text[i] == '\\') {
+                i++;
+                if (i >= text.length()) {
+                    throw std::invalid_argument("Bad character escape");
+                }
+                switch (text[i]) {
+                case '0':
+                    value = '\0';
+                    break;
+                case 'n':
+                    value = '\n';
+                    break;
+                case 'r':
+                    value = '\r';
+                    break;
+                case 't':
+                    value = '\t';
+                    break;
+                case '\\':
+                    value = '\\';
+                    break;
+                case '\'':
+                    value = '\'';
+                    break;
+                case '"':
+                    value = '"';
+                    break;
+                default:
+                    throw std::invalid_argument("Bad character escape");
+                }
+                i++;
+            } else {
+                value = static_cast<unsigned char>(text[i++]);
+            }
+
+            if (i >= text.length() || text[i] != '\'') {
+                throw std::invalid_argument(
+                    "Character literal must contain one character");
+            }
+            i++;
+            tokens.push_back({ExprTokenType::Number, std::to_string(value)});
+            continue;
+        }
         if (std::isalpha(ch) || text[i] == '_' || text[i] == '.') {
             std::size_t start = i;
             i++;

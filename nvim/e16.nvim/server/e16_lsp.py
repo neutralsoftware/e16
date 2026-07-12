@@ -571,9 +571,15 @@ def parse_document(text, uri="", include_stack=None):
             continue
         if match.group(1) in macros:
             continue
-        for token in IDENT.finditer(match.group(2)):
+        operand_text = match.group(2)
+        symbol_text = re.sub(
+            r'"([^"\\]|\\.)*"|\'([^\'\\]|\\.)*\'',
+            lambda literal: " " * len(literal.group(0)),
+            operand_text,
+        )
+        for token in IDENT.finditer(symbol_text):
             value = token.group(0)
-            if token.start() > 0 and match.group(2)[token.start() - 1].isdigit():
+            if token.start() > 0 and operand_text[token.start() - 1].isdigit():
                 continue
             if value in REGISTERS or value in INSTRUCTIONS or value in known or value == "dp":
                 continue
@@ -694,9 +700,9 @@ def semantic_tokens(uri):
             found.append((instr_match.start(1), len(instr_match.group(1)), GROUPS[instr_match.group(1)]))
         for match in re.finditer(r"\b(r[0-9]+|pc|sp|fp|fl|dp|ivt)\b", code):
             found.append((match.start(), len(match.group(0)), "parameter"))
-        for match in re.finditer(r"[-+]?(0x[0-9A-Fa-f]+|0b[01]+|0o[0-7]+|\b[0-9]+\b)", code):
+        for match in re.finditer(r"[-+]?(0x[0-9A-Fa-f]+|0b[01]+|0o[0-7]+|\b[0-9]+\b)|'([^'\\]|\\.)'", code):
             found.append((match.start(), len(match.group(0)), "number"))
-        for match in re.finditer(r'"([^"\\]|\\.)*"|\'([^\'\\]|\\.)*\'', code):
+        for match in re.finditer(r'"([^"\\]|\\.)*"', code):
             found.append((match.start(), len(match.group(0)), "string"))
         if comment:
             found.append((comment_start, len(comment), "comment"))

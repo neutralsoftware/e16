@@ -1,2 +1,7 @@
+
+.string "E16C"
+
+.locate 0x200040
+
 loop:
     jmp loop
