@@ -1,0 +1,52 @@
+
+wait_seconds:
+    mul r0, 60
+
+wait_seconds_loop:
+    wait
+    dec r0
+    bne wait_seconds_loop
+    ret
+
+.const DMA_SRC_0, 0xFF0300
+.const DMA_SRC_1,     0xFF0301
+.const DMA_SRC_2,     0xFF0302
+.const DMA_DST_0,     0xFF0303
+.const DMA_DST_1,     0xFF0304
+.const DMA_DST_2,     0xFF0305
+.const DMA_LEN_0,     0xFF0306
+.const DMA_LEN_1,     0xFF0307
+.const DMA_CONTROL,   0xFF0308
+.const DMA_STATUS,    0xFF0309
+
+.const DMA_START,     0x01
+
+.macro dma_copy SRC, DST, LEN
+    mov r0, (SRC & 0xFF)
+    storeb @DMA_SRC_0, r0
+
+    mov r0, ((SRC >> 8) & 0xFF)
+    storeb @DMA_SRC_1, r0
+
+    mov r0, ((SRC >> 16) & 0xFF)
+    storeb @DMA_SRC_2, r0
+
+    mov r0, (DST & 0xFF)
+    storeb @DMA_DST_0, r0
+
+    mov r0, ((DST >> 8) & 0xFF)
+    storeb @DMA_DST_1, r0
+
+    mov r0, ((DST >> 16) & 0xFF)
+    storeb @DMA_DST_2, r0
+
+    mov r0, (LEN & 0xFF)
+    storeb @DMA_LEN_0, r0
+
+    mov r0, ((LEN >> 8) & 0xFF)
+    storeb @DMA_LEN_1, r0
+
+    mov r0, DMA_START
+    storeb @DMA_CONTROL, r0
+
+.endmacro

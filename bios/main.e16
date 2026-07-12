@@ -1,6 +1,9 @@
 jmp start
 
 .include "./interrupts.e16"
+.include "./graphics/animation.e16"
+.include "./utils.e16"
+.include "./graphics/copyData.e16"
 
 .const STACK_ADDR, 0x40000
 .const BIOS_IVT_ADDR, 0xFEFFD0
@@ -36,16 +39,18 @@ init_interrupts:
     store @last_interrupt, r0
     store @invalid_irq_count, r0
     
-.const VPU_CONTROL, 0xFF1000
 .const APU_CONTROL, 0xFF2000
 .const APU_MASTER_VOL, 0xFF2004
 
-disable_peripherals:
-    clr r0
+startup_animation:
+    call start_vpu
+    call copy_title_palette
+    call copy_letters
 
-    store @VPU_CONTROL, r0
-    store @APU_CONTROL, r0
-    store @APU_MASTER_VOL, r0
+animation_loop:
+    wait
+    call test_render
+    bra animation_loop
 
 verify_signature:
     loadb r0, @CART_ROM
@@ -88,12 +93,24 @@ clear_registers:
     clr r14
     clr r15
     ret
+
+disable_peripherals:
+    clr r0
+
+    store @VPU_CONTROL, r0
+    store @APU_CONTROL, r0
+    store @APU_MASTER_VOL, r0
+
+    ret
     
 enter_rom:
     ei
     call clear_registers
+    call disable_peripherals
     set pc, 0x200040
     ; This will jump to the ROM code at address 0x200000
+
+.include "./assetData.e16"
 
 .locate BIOS_IVT_ADDR
 

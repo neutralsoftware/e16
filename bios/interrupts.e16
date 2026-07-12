@@ -1,3 +1,4 @@
+.symbols "./utils.e16"
 ; Ember 16 BIOS default interrupt handlers
 ;
 ; Reference usage:
@@ -41,10 +42,6 @@
 ; Input registers
 .const INPUT_PAD0, 0xFF3000
 .const INPUT_PAD1, 0xFF3002
-
-; DMA registers
-.const DMA_CONTROL, 0xFF0308
-.const DMA_STATUS, 0xFF0309
 
 ; Cartrdige controller registers
 .const CART_STATUS, 0xFF4000

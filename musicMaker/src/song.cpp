@@ -98,7 +98,7 @@ bool saveSong(const Song &song, const std::string &path, std::string &error) {
         return false;
     }
 
-    output << "E16MUSIC 3\n";
+    output << "E16MUSIC 5\n";
     output << "title " << std::quoted(song.title) << "\n";
     output << "bpm " << song.bpm << "\n";
     output << "steps " << song.stepCount << "\n";
@@ -111,6 +111,21 @@ bool saveSong(const Song &song, const std::string &path, std::string &error) {
         output << "channel " << channel << ' ' << settings.volume << ' '
                << settings.pan << ' ' << settings.parameter << ' '
                << static_cast<int>(settings.muted) << "\n";
+    }
+    for (int channel = 0; channel < ChannelCount; channel++) {
+        for (int step = 0; step < song.stepCount; step++) {
+            const TripletGroup &group = song.triplets[channel][step];
+            if (!group.active) {
+                continue;
+            }
+            output << "triplet " << channel << ' ' << step << ' '
+                   << group.duration;
+            for (const Step &event : group.events) {
+                output << ' ' << event.note << ' ' << event.velocity << ' '
+                       << event.tuning << ' ' << static_cast<int>(event.glide);
+            }
+            output << "\n";
+        }
     }
     output << "wavetable";
     for (std::uint8_t sample : song.wavetable) {
@@ -157,7 +172,8 @@ bool loadSong(Song &song, const std::string &path, std::string &error) {
     int version = 0;
     input >> signature >> version;
     if (signature != "E16MUSIC" ||
-        (version != 1 && version != 2 && version != 3)) {
+        (version != 1 && version != 2 && version != 3 && version != 4 &&
+         version != 5)) {
         error = "This is not an E16 Music Maker project";
         return false;
     }
@@ -217,6 +233,34 @@ bool loadSong(Song &song, const std::string &path, std::string &error) {
                 return false;
             }
             loaded.pattern[channel][step] = event;
+        } else if (key == "triplet") {
+            int channel = 0;
+            int step = 0;
+            TripletGroup group;
+            group.active = true;
+            input >> channel >> step;
+            if (version >= 5) {
+                input >> group.duration;
+            } else {
+                group.duration = 2;
+            }
+            for (Step &event : group.events) {
+                int glide = 0;
+                input >> event.note >> event.velocity >> event.tuning >> glide;
+                event.glide = glide != 0;
+                if (event.note < Stop || event.note > 127 ||
+                    event.velocity < 1 || event.velocity > 127 ||
+                    event.tuning < -2400 || event.tuning > 2400) {
+                    error = "Project contains an invalid triplet event";
+                    return false;
+                }
+            }
+            if (!input || channel < 0 || channel >= ChannelCount || step < 0 ||
+                group.duration < 1 || step + group.duration > MaxSteps) {
+                error = "Project contains an invalid triplet group";
+                return false;
+            }
+            loaded.triplets[channel][step] = group;
         } else if (key == "wavetable") {
             for (std::uint8_t &sample : loaded.wavetable) {
                 int value = 0;
@@ -274,6 +318,25 @@ bool loadSong(Song &song, const std::string &path, std::string &error) {
         loaded.stepsPerBeat > 8 || loaded.swing < 0 || loaded.swing > 40) {
         error = "Project timing values are out of range";
         return false;
+    }
+    for (int channel = 0; channel < ChannelCount; channel++) {
+        for (int step = 0; step < MaxSteps; step++) {
+            if (!loaded.triplets[channel][step].active) {
+                continue;
+            }
+            const TripletGroup &group = loaded.triplets[channel][step];
+            if (group.duration < 1 ||
+                step + group.duration > loaded.stepCount) {
+                error = "Project contains overlapping triplet groups";
+                return false;
+            }
+            for (int other = step + 1; other < step + group.duration; other++) {
+                if (loaded.triplets[channel][other].active) {
+                    error = "Project contains overlapping triplet groups";
+                    return false;
+                }
+            }
+        }
     }
     for (ChannelSettings &settings : loaded.channels) {
         settings.volume = std::clamp(settings.volume, 0, 255);
@@ -337,6 +400,31 @@ int stateBaseForPrefix(const std::string &prefix) {
         hash *= 16777619u;
     }
     return 0x000100 + static_cast<int>(hash % 32u) * 8;
+}
+
+void emitChannelEvent(std::ostream &output, const Song &song, int channel,
+                      const Step &event, const std::string &reg) {
+    if (event.note >= 0) {
+        int frequency = std::clamp(
+            static_cast<int>(std::lround(eventFrequency(channel, event))), 1,
+            65535);
+        output << "    mov " << reg << ", " << frequency << "\n";
+        output << "    storew @(MUSIC_APU_CH" << channel
+               << "_BASE + MUSIC_CH_FREQ), " << reg << "\n";
+        output << "    mov " << reg << ", "
+               << hexadecimal(channelVolume(song.channels[channel], event), 4)
+               << "\n";
+        output << "    storew @(MUSIC_APU_CH" << channel
+               << "_BASE + MUSIC_CH_VOLUME), " << reg << "\n";
+        int control = channel == 5 && song.pcmLoop ? 0x0007 : 0x0003;
+        output << "    mov " << reg << ", " << hexadecimal(control, 4) << "\n";
+        output << "    storew @(MUSIC_APU_CH" << channel
+               << "_BASE + MUSIC_CH_CONTROL), " << reg << "\n";
+    } else if (event.note == Stop || (event.note == Rest && channel != 5)) {
+        output << "    mov " << reg << ", 0\n";
+        output << "    storew @(MUSIC_APU_CH" << channel
+               << "_BASE + MUSIC_CH_CONTROL), " << reg << "\n";
+    }
 }
 }
 
@@ -452,6 +540,12 @@ bool exportE16(const Song &song, const std::string &path, std::string &error) {
     output << "    ret\n";
 
     std::array<int, MaxSteps> frameCounts = calculateStepFrames(song);
+    bool hasTriplets = false;
+    for (int channel = 0; channel < ChannelCount; channel++) {
+        for (int step = 0; step < song.stepCount; step++) {
+            hasTriplets = hasTriplets || song.triplets[channel][step].active;
+        }
+    }
     std::array<std::array<int, ChannelCount>, MaxSteps> glideStarts{};
     std::array<std::array<int, ChannelCount>, MaxSteps> glideTargets{};
     std::array<int, ChannelCount> previousFrequencies{};
@@ -487,6 +581,10 @@ bool exportE16(const Song &song, const std::string &path, std::string &error) {
     output << "    loadw r0, @MUSIC_WAIT_STATE\n";
     output << "    cmp r0, 0\n";
     output << "    beq music_update_advance\n";
+    if (hasTriplets) {
+        output << "    call music_triplet_update\n";
+        output << "    loadw r0, @MUSIC_WAIT_STATE\n";
+    }
     if (hasGlides) {
         output << "    call music_glide_update\n";
         output << "    loadw r0, @MUSIC_WAIT_STATE\n";
@@ -506,32 +604,41 @@ bool exportE16(const Song &song, const std::string &path, std::string &error) {
     for (int step = 0; step < song.stepCount; step++) {
         output << "music_step_" << step << ":\n";
         for (int channel = 0; channel < ChannelCount; channel++) {
-            const Step &event = song.pattern[channel][step];
-            if (event.note >= 0) {
-                int frequency = std::clamp(
-                    static_cast<int>(std::lround(eventFrequency(channel, event))),
-                    1, 65535);
-                int initial = glideStarts[step][channel] > 0
-                                  ? glideStarts[step][channel]
-                                  : frequency;
-                output << "    mov r0, " << initial << "\n";
-                output << "    storew @(MUSIC_APU_CH" << channel
-                       << "_BASE + MUSIC_CH_FREQ), r0\n";
-                output << "    mov r0, "
-                       << hexadecimal(
-                              channelVolume(song.channels[channel], event), 4)
-                       << "\n";
-                output << "    storew @(MUSIC_APU_CH" << channel
-                       << "_BASE + MUSIC_CH_VOLUME), r0\n";
-                int control = channel == 5 && song.pcmLoop ? 0x0007 : 0x0003;
-                output << "    mov r0, " << hexadecimal(control, 4) << "\n";
-                output << "    storew @(MUSIC_APU_CH" << channel
-                       << "_BASE + MUSIC_CH_CONTROL), r0\n";
-            } else if (event.note == Stop ||
-                       (event.note == Rest && channel != 5)) {
-                output << "    mov r0, 0\n";
-                output << "    storew @(MUSIC_APU_CH" << channel
-                       << "_BASE + MUSIC_CH_CONTROL), r0\n";
+            const Step *event = &song.pattern[channel][step];
+            int groupStart = -1;
+            for (int start = step; start >= 0; start--) {
+                const TripletGroup &candidate = song.triplets[channel][start];
+                if (candidate.active && step < start + candidate.duration) {
+                    groupStart = start;
+                    break;
+                }
+            }
+            if (groupStart == step) {
+                event = &song.triplets[channel][step].events[0];
+            } else if (groupStart >= 0) {
+                const TripletGroup &group = song.triplets[channel][groupStart];
+                int total = 0;
+                int elapsed = 0;
+                for (int current = groupStart;
+                     current < groupStart + group.duration; current++) {
+                    total += frameCounts[current];
+                    if (current < step) {
+                        elapsed += frameCounts[current];
+                    }
+                }
+                int firstBoundary = static_cast<int>(std::lround(total / 3.0));
+                int secondBoundary =
+                    static_cast<int>(std::lround(total * 2.0 / 3.0));
+                if (firstBoundary == elapsed) {
+                    event = &group.events[1];
+                } else if (secondBoundary == elapsed) {
+                    event = &group.events[2];
+                } else {
+                    event = nullptr;
+                }
+            }
+            if (event) {
+                emitChannelEvent(output, song, channel, *event, "r0");
             }
         }
         output << "    mov r0, " << frameCounts[step] - 1 << "\n";
@@ -555,6 +662,71 @@ bool exportE16(const Song &song, const std::string &path, std::string &error) {
     output << "    pop r1\n";
     output << "    pop r0\n";
     output << "    ret\n";
+    if (hasTriplets) {
+        struct TripletTrigger {
+            int channel;
+            int state;
+            int wait;
+            const Step *event;
+        };
+        std::vector<TripletTrigger> triggers;
+        for (int channel = 0; channel < ChannelCount; channel++) {
+            for (int step = 0; step < song.stepCount; step++) {
+                const TripletGroup &group = song.triplets[channel][step];
+                if (!group.active) {
+                    continue;
+                }
+                int total = 0;
+                for (int current = step; current < step + group.duration;
+                     current++) {
+                    total += frameCounts[current];
+                }
+                for (int slot = 1; slot < 3; slot++) {
+                    int offset = static_cast<int>(
+                        std::lround(total * static_cast<double>(slot) / 3.0));
+                    offset = std::clamp(offset, 1, total - 1);
+                    int elapsed = 0;
+                    for (int current = step; current < step + group.duration;
+                         current++) {
+                        if (offset == elapsed) {
+                            break;
+                        }
+                        int next = elapsed + frameCounts[current];
+                        if (offset < next) {
+                            int state = current + 1;
+                            int wait =
+                                frameCounts[current] - (offset - elapsed);
+                            triggers.push_back(
+                                {channel, state, wait, &group.events[slot]});
+                            if (state == song.stepCount) {
+                                triggers.push_back(
+                                    {channel, 0, wait, &group.events[slot]});
+                            }
+                            break;
+                        }
+                        elapsed = next;
+                    }
+                }
+            }
+        }
+        output << "\nmusic_triplet_update:\n";
+        output << "    loadw r0, @MUSIC_STEP_STATE\n";
+        output << "    loadw r1, @MUSIC_WAIT_STATE\n";
+        for (std::size_t i = 0; i < triggers.size(); i++) {
+            output << "    cmp r0, " << triggers[i].state << "\n";
+            output << "    bne music_triplet_check_" << i << "\n";
+            output << "    cmp r1, " << triggers[i].wait << "\n";
+            output << "    beq music_triplet_event_" << i << "\n";
+            output << "music_triplet_check_" << i << ":\n";
+        }
+        output << "    ret\n";
+        for (std::size_t i = 0; i < triggers.size(); i++) {
+            output << "music_triplet_event_" << i << ":\n";
+            emitChannelEvent(output, song, triggers[i].channel,
+                             *triggers[i].event, "r0");
+            output << "    ret\n";
+        }
+    }
     if (hasGlides) {
         output << "\nmusic_glide_update:\n";
         output << "    loadw r0, @MUSIC_STEP_STATE\n";

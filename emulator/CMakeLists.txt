@@ -26,13 +26,17 @@ add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../assembler"
 
 set(BIOS_BINARY "${CMAKE_CURRENT_BINARY_DIR}/generated/bios.bin")
 set(BIOS_HEADER "${CMAKE_CURRENT_BINARY_DIR}/generated/bios_data.h")
+file(GLOB_RECURSE BIOS_DEPENDENCIES CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/../bios/*.e16"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../bios/*.e16spr"
+)
 
 add_custom_command(
         OUTPUT "${BIOS_BINARY}"
         COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
         COMMAND $<TARGET_FILE:e16asm> --base 0xF00000
                 -o "${BIOS_BINARY}" "${CMAKE_CURRENT_SOURCE_DIR}/../bios/main.e16"
-        DEPENDS e16asm "${CMAKE_CURRENT_SOURCE_DIR}/../bios/main.e16"
+        DEPENDS e16asm ${BIOS_DEPENDENCIES}
         VERBATIM
 )
 

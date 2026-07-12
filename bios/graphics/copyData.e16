@@ -1,0 +1,49 @@
+
+.symbols "../utils.e16"
+.symbols "../assetData.e16"
+.symbols "../assets/E/E.e16"
+.symbols "../assets/M/m.e16"
+.symbols "../assets/B/b.e16"
+.symbols "../assets/E2/e2.e16"
+.symbols "../assets/R/r.e16"
+.symbols "../assets/1/one.e16"
+.symbols "../assets/6/six.e16"
+
+.const E_FIRST_TILE, 0
+.const M_FIRST_TILE, 80
+.const B_FIRST_TILE, 176
+.const E2_FIRST_TILE, 240
+.const R_FIRST_TILE, 320
+.const ONE_FIRST_TILE, 400
+.const SIX_FIRST_TILE, 464
+
+.const PALETTE_BASE, 0xFF1800
+.const SPR_TILES, 0x048000
+
+.const E_PALETTE, 0
+.const M_PALETTE, 1
+.const B_PALETTE, 2
+.const E2_PALETTE, 3
+.const R_PALETTE, 4
+.const ONE_PALETTE, 5
+.const SIX_PALETTE, 6
+
+copy_title_palette:
+    dma_copy e_palette, PALETTE_BASE + (E_PALETTE * 32), E_PALETTE_BYTES
+    dma_copy m_palette, PALETTE_BASE + (M_PALETTE * 32), M_PALETTE_BYTES
+    dma_copy b_palette, PALETTE_BASE + (B_PALETTE * 32), B_PALETTE_BYTES
+    dma_copy e2_palette, PALETTE_BASE + (E2_PALETTE * 32), E2_PALETTE_BYTES
+    dma_copy r_palette, PALETTE_BASE + (R_PALETTE * 32), R_PALETTE_BYTES
+    dma_copy one_palette, PALETTE_BASE + (ONE_PALETTE * 32), ONE_PALETTE_BYTES
+    dma_copy six_palette, PALETTE_BASE + (SIX_PALETTE * 32), SIX_PALETTE_BYTES
+    ret
+
+copy_letters:
+    dma_copy e_tiles, SPR_TILES + (E_FIRST_TILE * 32), E_SPRITE_BYTES * E_SPRITE_COUNT
+    dma_copy m_tiles, SPR_TILES + (M_FIRST_TILE * 32), M_SPRITE_BYTES * M_SPRITE_COUNT
+    dma_copy b_tiles, SPR_TILES + (B_FIRST_TILE * 32), B_SPRITE_BYTES * B_SPRITE_COUNT
+    dma_copy e2_tiles, SPR_TILES + (E2_FIRST_TILE * 32), E2_SPRITE_BYTES * E2_SPRITE_COUNT
+    dma_copy r_tiles, SPR_TILES + (R_FIRST_TILE * 32), R_SPRITE_BYTES * R_SPRITE_COUNT
+    dma_copy one_tiles, SPR_TILES + (ONE_FIRST_TILE * 32), ONE_SPRITE_BYTES * ONE_SPRITE_COUNT
+    dma_copy six_tiles, SPR_TILES + (SIX_FIRST_TILE * 32), SIX_SPRITE_BYTES * SIX_SPRITE_COUNT
+    ret

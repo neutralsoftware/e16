@@ -122,6 +122,7 @@ void AudioEngine::render(float *output, int frames) {
                 currentStep = (currentStep + 1) % song.stepCount;
                 applyStep(currentStep);
             }
+            updateTriplets();
             double progress =
                 std::clamp(samplesIntoStep / stepSamples(currentStep), 0.0, 1.0);
             for (Voice &voice : voices) {
@@ -166,6 +167,11 @@ void AudioEngine::render(float *output, int frames) {
         output[frame * 2 + 1] = std::clamp(right, -1.0f, 1.0f);
         if (playing) {
             samplesIntoStep += 1.0;
+            for (int channel = 0; channel < ChannelCount; channel++) {
+                if (tripletPhases[channel] > 0) {
+                    tripletSamples[channel] += 1.0;
+                }
+            }
         } else if (previewSamples > 0) {
             previewSamples--;
             if (previewSamples == 0 && previewChannel >= 0) {
@@ -177,26 +183,75 @@ void AudioEngine::render(float *output, int frames) {
 
 void AudioEngine::applyStep(int step) {
     for (int channel = 0; channel < ChannelCount; channel++) {
-        const Step &event = song.pattern[channel][step];
-        Voice &voice = voices[channel];
-        if (event.note >= 0) {
-            double target = eventFrequency(channel, event);
-            bool canGlide = event.glide && voice.note >= 0;
-            voice.glideStart = canGlide ? voice.frequency : target;
-            voice.glideTarget = target;
-            voice.frequency = voice.glideStart;
-            voice.gliding = canGlide;
-            voice.note = event.note;
-            voice.velocity = event.velocity;
-            if (!canGlide) {
-                voice.phase = 0.0;
-                voice.lfsr = 0x4000;
+        const TripletGroup &group = song.triplets[channel][step];
+        if (group.active && group.duration > 0 &&
+            step + group.duration <= song.stepCount) {
+            tripletStarts[channel] = step;
+            tripletPhases[channel] = 1;
+            tripletSamples[channel] = 0.0;
+            applyEvent(channel, group.events[0]);
+            continue;
+        }
+        bool insideTriplet = false;
+        for (int start = step - 1; start >= 0; start--) {
+            const TripletGroup &previous = song.triplets[channel][start];
+            if (previous.active && step < start + previous.duration) {
+                insideTriplet = true;
+                break;
             }
-            voice.samplePosition = 0.0;
-        } else if (event.note == Stop || (event.note == Rest && channel != 5)) {
-            voice.note = Rest;
-            voice.velocity = 0;
-            voice.gliding = false;
+        }
+        if (insideTriplet) {
+            continue;
+        }
+        tripletPhases[channel] = 0;
+        applyEvent(channel, song.pattern[channel][step]);
+    }
+}
+
+void AudioEngine::applyEvent(int channel, const Step &event) {
+    Voice &voice = voices[channel];
+    if (event.note >= 0) {
+        double target = eventFrequency(channel, event);
+        bool canGlide = event.glide && voice.note >= 0;
+        voice.glideStart = canGlide ? voice.frequency : target;
+        voice.glideTarget = target;
+        voice.frequency = voice.glideStart;
+        voice.gliding = canGlide;
+        voice.note = event.note;
+        voice.velocity = event.velocity;
+        if (!canGlide) {
+            voice.phase = 0.0;
+            voice.lfsr = 0x4000;
+        }
+        voice.samplePosition = 0.0;
+    } else if (event.note == Stop || (event.note == Rest && channel != 5)) {
+        voice.note = Rest;
+        voice.velocity = 0;
+        voice.gliding = false;
+    }
+}
+
+void AudioEngine::updateTriplets() {
+    for (int channel = 0; channel < ChannelCount; channel++) {
+        int phase = tripletPhases[channel];
+        if (phase <= 0 || phase >= 3) {
+            continue;
+        }
+        int start = tripletStarts[channel];
+        const TripletGroup &group = song.triplets[channel][start];
+        double duration = 0.0;
+        for (int step = start;
+             step < start + group.duration && step < song.stepCount; step++) {
+            duration += stepSamples(step);
+        }
+        if (phase == 1 && tripletSamples[channel] >= duration / 3.0) {
+            applyEvent(channel, group.events[1]);
+            tripletPhases[channel] = 2;
+        }
+        if (tripletPhases[channel] == 2 &&
+            tripletSamples[channel] >= duration * 2.0 / 3.0) {
+            applyEvent(channel, group.events[2]);
+            tripletPhases[channel] = 3;
         }
     }
 }
@@ -409,6 +464,9 @@ int PcmRecorder::sampleCount() const {
 
 void AudioEngine::resetVoices() {
     voices = {};
+    tripletStarts = {};
+    tripletPhases = {};
+    tripletSamples = {};
     for (Voice &voice : voices) {
         voice.note = Rest;
         voice.lfsr = 0x4000;

@@ -31,6 +31,12 @@ struct Step {
     bool glide = false;
 };
 
+struct TripletGroup {
+    bool active = false;
+    int duration = 0;
+    std::array<Step, 3> events;
+};
+
 struct ChannelSettings {
     std::string name;
     int volume = 200;
@@ -47,6 +53,7 @@ struct Song {
     int swing = 0;
     std::array<ChannelSettings, ChannelCount> channels;
     std::array<std::array<Step, MaxSteps>, ChannelCount> pattern;
+    std::array<std::array<TripletGroup, MaxSteps>, ChannelCount> triplets;
     std::array<std::uint8_t, WavetableSize> wavetable;
     std::vector<std::uint8_t> pcmSample;
     bool pcmLoop = false;
@@ -98,6 +105,9 @@ class AudioEngine {
     mutable std::mutex mutex;
     Song song;
     std::array<Voice, ChannelCount> voices;
+    std::array<int, ChannelCount> tripletStarts{};
+    std::array<int, ChannelCount> tripletPhases{};
+    std::array<double, ChannelCount> tripletSamples{};
     std::vector<float> buffer;
     std::atomic<bool> playing = false;
     std::atomic<int> currentStep = 0;
@@ -110,6 +120,8 @@ class AudioEngine {
                               int additionalAmount, int totalAmount);
     void render(float *output, int frames);
     void applyStep(int step);
+    void applyEvent(int channel, const Step &event);
+    void updateTriplets();
     double stepSamples(int step) const;
     float voiceSample(int channel, Voice &voice);
     void resetVoices();
@@ -161,6 +173,8 @@ class App {
     bool dirty = false;
     int selectedChannel = 0;
     int selectedStep = 0;
+    int selectedTripletStart = -1;
+    int selectedTripletSlot = -1;
     int octave = 4;
     int page = 0;
     int selectionAnchorChannel = 0;
@@ -185,6 +199,10 @@ class App {
     void handleMouseMotion(const SDL_MouseMotionEvent &event);
     void handleWheel(const SDL_MouseWheelEvent &event);
     void selectNote(int note);
+    Step &selectedEvent();
+    const Step &selectedEvent() const;
+    int tripletStartFor(int channel, int step) const;
+    void makeTriplets();
     void transposeSelected(int amount);
     void selectCurrentCell();
     void extendSelectionTo(int channel, int step);

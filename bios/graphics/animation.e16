@@ -1,0 +1,103 @@
+
+.symbols "./copyData.e16"
+
+.const VPU_CONTROL, 0xFF1000
+.const VPU_BACKDROP, 0xFF1008
+
+.const OAM_BASE, 0xFF1200
+
+start_vpu:
+    mov r0, 0b0000000000001111
+    store @VPU_CONTROL, r0
+
+    mov r0, 0x0 
+    store @VPU_BACKDROP, r0
+
+; r12 (tile), r13 (sprite index), r14 (x), r15 (y)
+render_letter:
+    mov r4, r13
+    mul r4, 8
+    set dp, OAM_BASE
+
+    ; Storing X
+    storeb @r4, r14
+    inc r4
+    shr r14, 8
+    storeb @r4, r14
+    inc r4
+
+    ; Storing Y
+    storeb @r4, r15
+    inc r4
+    shr r15, 8
+    storeb @r4, r15
+    inc r4
+
+    ; Storing Tile Index
+    storeb @r4, r12
+    inc r4
+    shr r12, 8
+    storeb @r4, r12
+    inc r4
+
+    storeb @r4, r11
+    inc r4
+
+    mov r5, 0b00000110
+    storeb @r4, r5
+    ret
+
+test_render:
+    mov r14, 40
+    mov r15, 40
+    mov r12, E_FIRST_TILE + E_E_NORMAL_TILE_INDEX
+    mov r13, 0
+    mov r11, E_PALETTE
+    call render_letter
+
+    mov r14, 80
+    mov r15, 40
+    mov r12, M_FIRST_TILE + M_M_NORMAL_TILE_INDEX
+    mov r13, 1
+    mov r11, M_PALETTE
+    call render_letter
+
+    mov r14, 120
+    mov r15, 40
+    mov r12, B_FIRST_TILE + B_B_NORMAL_TILE_INDEX
+    mov r13, 2
+    mov r11, B_PALETTE
+    call render_letter
+
+    mov r14, 160
+    mov r15, 40
+    mov r12, E2_FIRST_TILE + E2_E2_NORMAL_TILE_INDEX 
+    mov r13, 3
+    mov r11, E2_PALETTE
+    call render_letter
+
+    mov r14, 200
+    mov r15, 40
+    mov r12, R_FIRST_TILE + R_R_NORMAL_TILE_INDEX
+    mov r13, 4
+    mov r11, R_PALETTE
+    call render_letter
+
+    mov r14, 240
+    mov r15, 40
+    mov r12, ONE_FIRST_TILE + ONE_A1_NORMAL_TILE_INDEX 
+    mov r13, 5
+    mov r11, ONE_PALETTE
+    call render_letter
+
+    mov r14, 280
+    mov r15, 40
+    mov r12, SIX_FIRST_TILE + SIX_A6_NORMAL_TILE_INDEX
+    mov r13, 6
+    mov r11, SIX_PALETTE
+    call render_letter
+    
+    
+    ret
+
+

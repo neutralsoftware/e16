@@ -156,6 +156,7 @@ bool SdlHost::open(int scale, Apu &apu, bool forceHeadless, bool windowed) {
         videoDrivers << driver;
     }
     logInfo("available video drivers: " + videoDrivers.str());
+#ifndef __APPLE__
     SDL_Environment *processEnvironment = SDL_GetEnvironment();
     std::string display = environmentValue("DISPLAY");
     const bool x11Available = display != "<unset>" && !display.empty();
@@ -165,6 +166,7 @@ bool SdlHost::open(int scale, Apu &apu, bool forceHeadless, bool windowed) {
             logInfo("X11 display detected, selecting x11");
         }
     }
+#endif
     apuDevice = &apu;
     headless = forceHeadless;
     if (!SDL_Init(SDL_INIT_EVENTS)) {
@@ -198,10 +200,6 @@ bool SdlHost::open(int scale, Apu &apu, bool forceHeadless, bool windowed) {
 
     if (headless) {
         return true;
-    }
-    if (!x11Available) {
-        errorText = "X11 is unavailable because DISPLAY is not set";
-        return false;
     }
     if (!SDL_InitSubSystem(SDL_INIT_VIDEO)) {
         errorText = SDL_GetError();

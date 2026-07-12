@@ -1,0 +1,49 @@
+.include "./assets/E/E.e16"
+.include "./assets/M/m.e16"
+.include "./assets/B/b.e16"
+.include "./assets/E2/e2.e16"
+.include "./assets/R/r.e16"
+.include "./assets/1/one.e16"
+.include "./assets/6/six.e16"
+
+e_palette:
+    .bin "./assets/E/E.e16spr", E_PALETTE_OFFSET, E_PALETTE_BYTES
+
+m_palette:
+    .bin "./assets/M/m.e16spr", M_PALETTE_OFFSET, M_PALETTE_BYTES
+
+b_palette:
+    .bin "./assets/B/b.e16spr", B_PALETTE_OFFSET, B_PALETTE_BYTES
+
+e2_palette:
+    .bin "./assets/E2/e2.e16spr", E2_PALETTE_OFFSET, E2_PALETTE_BYTES
+
+r_palette:
+    .bin "./assets/R/r.e16spr", R_PALETTE_OFFSET, R_PALETTE_BYTES
+
+one_palette:
+    .bin "./assets/1/one.e16spr", ONE_PALETTE_OFFSET, ONE_PALETTE_BYTES
+
+six_palette:
+    .bin "./assets/6/six.e16spr", SIX_PALETTE_OFFSET, SIX_PALETTE_BYTES
+
+e_tiles:
+    .bin "./assets/E/E.e16spr", E_SPRITES_OFFSET, E_SPRITE_BYTES * E_SPRITE_COUNT
+
+m_tiles:
+    .bin "./assets/M/m.e16spr", M_SPRITES_OFFSET, M_SPRITE_BYTES * M_SPRITE_COUNT
+
+b_tiles:
+    .bin "./assets/B/b.e16spr", B_SPRITES_OFFSET, B_SPRITE_BYTES * B_SPRITE_COUNT
+
+e2_tiles:
+    .bin "./assets/E2/e2.e16spr", E2_SPRITES_OFFSET, E2_SPRITE_BYTES * E2_SPRITE_COUNT
+
+r_tiles:
+    .bin "./assets/R/r.e16spr", R_SPRITES_OFFSET, R_SPRITE_BYTES * R_SPRITE_COUNT
+
+one_tiles:
+    .bin "./assets/1/one.e16spr", ONE_SPRITES_OFFSET, ONE_SPRITE_BYTES * ONE_SPRITE_COUNT
+
+six_tiles:
+    .bin "./assets/6/six.e16spr", SIX_SPRITES_OFFSET, SIX_SPRITE_BYTES * SIX_SPRITE_COUNT

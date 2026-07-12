@@ -274,9 +274,39 @@ void App::render() {
                          true);
             }
         }
+        for (int visible = 0; visible < VisibleSteps; visible++) {
+            int step = firstStep + visible;
+            const TripletGroup &group = song.triplets[channel][step];
+            if (!group.active || group.duration < 1 ||
+                step + group.duration > song.stepCount ||
+                visible + group.duration > VisibleSteps) {
+                continue;
+            }
+            float groupX = GridX + visible * cellWidth;
+            float tripletWidth = cellWidth * group.duration / 3.0f;
+            for (int slot = 0; slot < 3; slot++) {
+                Rect cell{groupX + slot * tripletWidth + 2, y, tripletWidth - 4,
+                          RowHeight - 6};
+                bool selected = channel == selectedChannel &&
+                                selectedTripletStart == step &&
+                                selectedTripletSlot == slot;
+                drawRect(cell,
+                         selected ? SDL_Color{52, 62, 86, 255} : SurfaceRaised,
+                         true);
+                drawRect(cell, selected ? ChannelColors[channel] : Purple,
+                         false);
+                const Step &event = group.events[slot];
+                std::string text = channel == 5 && event.note >= 0
+                                       ? "SMP"
+                                       : noteName(event.note);
+                drawText(cell.x + 6, y + 20, text,
+                         event.note >= 0 ? ChannelColors[channel] : Muted);
+                drawText(cell.x + cell.w - 12, y + 6, "3", Purple);
+            }
+        }
     }
 
-    const Step &selected = song.pattern[selectedChannel][selectedStep];
+    const Step &selected = selectedEvent();
     std::string selectedName = selectedChannel == 5 && selected.note >= 0
                                    ? "SAMPLE"
                                    : noteName(selected.note);
@@ -306,6 +336,7 @@ void App::render() {
     drawButton({680, 562, 32, 34}, "-", false, Blue);
     drawButton({718, 562, 32, 34}, "+", false, Blue);
     drawButton({770, 562, 92, 34}, "GLISSANDO", selected.glide, Purple);
+    drawButton({870, 562, 68, 34}, "TRIPLET", selectedTripletSlot >= 0, Purple);
 
     if (selectedChannel == 4) {
         drawWavetableEditor();
@@ -367,6 +398,18 @@ void App::render() {
 }
 
 void App::handleKey(const SDL_KeyboardEvent &event) {
+    bool command = ((event.mod | SDL_GetModState()) & SDL_KMOD_GUI) != 0;
+    bool octaveUp = event.scancode == SDL_SCANCODE_UP || event.key == SDLK_UP;
+    bool octaveDown =
+        event.scancode == SDL_SCANCODE_DOWN || event.key == SDLK_DOWN;
+    if (command && octaveUp) {
+        transposeSelected(12);
+        return;
+    }
+    if (command && octaveDown) {
+        transposeSelected(-12);
+        return;
+    }
     if (event.repeat) {
         return;
     }
@@ -389,6 +432,8 @@ void App::handleKey(const SDL_KeyboardEvent &event) {
             saveProject(shift);
         } else if (event.scancode == SDL_SCANCODE_E) {
             exportProject();
+        } else if (event.scancode == SDL_SCANCODE_T) {
+            makeTriplets();
         }
         return;
     }
@@ -398,22 +443,62 @@ void App::handleKey(const SDL_KeyboardEvent &event) {
         return;
     }
     if (event.scancode == SDL_SCANCODE_LEFT) {
+        if (selectedTripletSlot > 0) {
+            selectedTripletSlot--;
+            return;
+        }
+        if (selectedTripletSlot == 0) {
+            selectedStep =
+                (selectedTripletStart + song.stepCount - 1) % song.stepCount;
+            page = selectedStep / VisibleSteps;
+            selectCurrentCell();
+            return;
+        }
         selectedStep = (selectedStep + song.stepCount - 1) % song.stepCount;
         page = selectedStep / VisibleSteps;
         if (shift) {
             extendSelectionTo(selectedChannel, selectedStep);
         } else {
             selectCurrentCell();
+            int start = tripletStartFor(selectedChannel, selectedStep);
+            if (start >= 0) {
+                selectedTripletStart = start;
+                selectedTripletSlot = 2;
+                selectedStep = start;
+                selectionAnchorStep = start;
+                selectionEndStep =
+                    start + song.triplets[selectedChannel][start].duration - 1;
+            }
         }
         return;
     }
     if (event.scancode == SDL_SCANCODE_RIGHT) {
+        if (selectedTripletSlot >= 0 && selectedTripletSlot < 2) {
+            selectedTripletSlot++;
+            return;
+        }
+        if (selectedTripletSlot == 2) {
+            selectedStep = (selectedTripletStart +
+                            song.triplets[selectedChannel][selectedTripletStart]
+                                .duration) %
+                           song.stepCount;
+            page = selectedStep / VisibleSteps;
+            selectCurrentCell();
+            return;
+        }
         selectedStep = (selectedStep + 1) % song.stepCount;
         page = selectedStep / VisibleSteps;
         if (shift) {
             extendSelectionTo(selectedChannel, selectedStep);
         } else {
             selectCurrentCell();
+            if (song.triplets[selectedChannel][selectedStep].active) {
+                selectedTripletStart = selectedStep;
+                selectedTripletSlot = 0;
+                selectionEndStep =
+                    selectedStep +
+                    song.triplets[selectedChannel][selectedStep].duration - 1;
+            }
         }
         return;
     }
@@ -449,8 +534,7 @@ void App::handleKey(const SDL_KeyboardEvent &event) {
         return;
     }
     if (event.scancode == SDL_SCANCODE_PERIOD) {
-        song.pattern[selectedChannel][selectedStep].note =
-            selectedChannel == 5 ? Stop : Hold;
+        selectedEvent().note = selectedChannel == 5 ? Stop : Hold;
         markChanged();
         return;
     }
@@ -459,14 +543,14 @@ void App::handleKey(const SDL_KeyboardEvent &event) {
         return;
     }
     if (event.scancode == SDL_SCANCODE_LEFTBRACKET) {
-        song.pattern[selectedChannel][selectedStep].velocity = std::max(
-            1, song.pattern[selectedChannel][selectedStep].velocity - 8);
+        Step &step = selectedEvent();
+        step.velocity = std::max(1, step.velocity - 8);
         markChanged();
         return;
     }
     if (event.scancode == SDL_SCANCODE_RIGHTBRACKET) {
-        song.pattern[selectedChannel][selectedStep].velocity = std::min(
-            127, song.pattern[selectedChannel][selectedStep].velocity + 8);
+        Step &step = selectedEvent();
+        step.velocity = std::min(127, step.velocity + 8);
         markChanged();
         return;
     }
@@ -572,6 +656,34 @@ void App::handleMouse(const SDL_MouseButtonEvent &event) {
             step < song.stepCount) {
             selectedChannel = channel;
             selectedStep = step;
+            int tripletStart = tripletStartFor(channel, step);
+            if ((event.button == SDL_BUTTON_LEFT ||
+                 event.button == SDL_BUTTON_RIGHT) &&
+                tripletStart >= 0) {
+                float groupX = GridX + (tripletStart - page * VisibleSteps) *
+                                           (GridWidth / VisibleSteps);
+                int duration = song.triplets[channel][tripletStart].duration;
+                float groupWidth = duration * GridWidth / VisibleSteps;
+                selectedTripletStart = tripletStart;
+                selectedTripletSlot = std::clamp(
+                    static_cast<int>((x - groupX) / (groupWidth / 3.0f)), 0, 2);
+                selectedStep = tripletStart;
+                selectionAnchorChannel = channel;
+                selectionEndChannel = channel;
+                selectionAnchorStep = tripletStart;
+                selectionEndStep = tripletStart + duration - 1;
+                selectionActive = true;
+                draggingSelection = false;
+                if (event.button == SDL_BUTTON_RIGHT) {
+                    selectedEvent().note = Rest;
+                    markChanged();
+                } else if (event.clicks >= 2) {
+                    selectNote(channel == 5 ? 60 : (octave + 1) * 12);
+                }
+                return;
+            }
+            selectedTripletStart = -1;
+            selectedTripletSlot = -1;
             if (event.button == SDL_BUTTON_RIGHT) {
                 selectCurrentCell();
                 song.pattern[channel][step].note = Rest;
@@ -602,34 +714,37 @@ void App::handleMouse(const SDL_MouseButtonEvent &event) {
     }
     if (contains({302, 562, 32, 34}, x, y) ||
         contains({340, 562, 32, 34}, x, y)) {
-        Step &step = song.pattern[selectedChannel][selectedStep];
+        Step &step = selectedEvent();
         step.velocity = std::clamp(step.velocity + (x < 334 ? -8 : 8), 1, 127);
         markChanged();
         return;
     }
     if (contains({405, 562, 74, 34}, x, y)) {
-        song.pattern[selectedChannel][selectedStep].note =
-            selectedChannel == 5 ? Stop : Hold;
+        selectedEvent().note = selectedChannel == 5 ? Stop : Hold;
         markChanged();
         return;
     }
     if (contains({486, 562, 74, 34}, x, y)) {
-        song.pattern[selectedChannel][selectedStep].note = Rest;
+        selectedEvent().note = Rest;
         markChanged();
         return;
     }
     if (contains({680, 562, 32, 34}, x, y) ||
         contains({718, 562, 32, 34}, x, y)) {
-        Step &step = song.pattern[selectedChannel][selectedStep];
+        Step &step = selectedEvent();
         step.tuning =
             std::clamp(step.tuning + (x < 712 ? -25 : 25), -2400, 2400);
         markChanged();
         return;
     }
     if (contains({770, 562, 92, 34}, x, y)) {
-        Step &step = song.pattern[selectedChannel][selectedStep];
+        Step &step = selectedEvent();
         step.glide = !step.glide;
         markChanged();
+        return;
+    }
+    if (contains({870, 562, 68, 34}, x, y)) {
+        makeTriplets();
         return;
     }
     if (selectedChannel == 4) {
@@ -758,17 +873,102 @@ void App::handleWheel(const SDL_MouseWheelEvent &event) {
 }
 
 void App::selectNote(int note) {
-    Step &step = song.pattern[selectedChannel][selectedStep];
+    Step &step = selectedEvent();
     step.note = selectedChannel == 5 ? 60 : std::clamp(note, 0, 127);
     audio.preview(selectedChannel, step.note);
     markChanged();
-    selectedStep = (selectedStep + 1) % song.stepCount;
+    if (selectedTripletSlot >= 0) {
+        if (selectedTripletSlot < 2) {
+            selectedTripletSlot++;
+            return;
+        }
+        selectedStep =
+            selectedTripletStart +
+            song.triplets[selectedChannel][selectedTripletStart].duration;
+        selectedTripletStart = -1;
+        selectedTripletSlot = -1;
+    } else {
+        selectedStep = (selectedStep + 1) % song.stepCount;
+    }
     page = selectedStep / VisibleSteps;
     selectCurrentCell();
+    if (song.triplets[selectedChannel][selectedStep].active) {
+        selectedTripletStart = selectedStep;
+        selectedTripletSlot = 0;
+        selectionEndStep =
+            selectedStep +
+            song.triplets[selectedChannel][selectedStep].duration - 1;
+    }
+}
+
+Step &App::selectedEvent() {
+    if (selectedTripletStart >= 0 && selectedTripletSlot >= 0) {
+        return song.triplets[selectedChannel][selectedTripletStart]
+            .events[selectedTripletSlot];
+    }
+    return song.pattern[selectedChannel][selectedStep];
+}
+
+const Step &App::selectedEvent() const {
+    if (selectedTripletStart >= 0 && selectedTripletSlot >= 0) {
+        return song.triplets[selectedChannel][selectedTripletStart]
+            .events[selectedTripletSlot];
+    }
+    return song.pattern[selectedChannel][selectedStep];
+}
+
+int App::tripletStartFor(int channel, int step) const {
+    for (int start = step; start >= 0; start--) {
+        const TripletGroup &group = song.triplets[channel][start];
+        if (group.active && step < start + group.duration) {
+            return start;
+        }
+    }
+    return -1;
+}
+
+void App::makeTriplets() {
+    if (!selectionActive || selectionAnchorChannel != selectionEndChannel) {
+        setStatus("Select an area on one instrument for triplets", 5000);
+        return;
+    }
+    int first = std::min(selectionAnchorStep, selectionEndStep);
+    int last = std::max(selectionAnchorStep, selectionEndStep);
+    int count = last - first + 1;
+    if (count < 1) {
+        setStatus("Select a duration for the triplet", 5000);
+        return;
+    }
+    if (first / VisibleSteps != last / VisibleSteps) {
+        setStatus("A triplet duration cannot cross a page boundary", 5000);
+        return;
+    }
+    for (int step = 0; step <= last; step++) {
+        TripletGroup &existing = song.triplets[selectedChannel][step];
+        if (existing.active && step + existing.duration > first) {
+            existing = TripletGroup{};
+        }
+    }
+    TripletGroup &group = song.triplets[selectedChannel][first];
+    group.active = true;
+    group.duration = count;
+    for (int slot = 0; slot < 3; slot++) {
+        int source =
+            first + static_cast<int>(std::lround(slot * (count - 1) / 2.0));
+        group.events[slot] = song.pattern[selectedChannel][source];
+    }
+    for (int step = first; step <= last; step++) {
+        song.pattern[selectedChannel][step] = Step{};
+    }
+    selectedStep = first;
+    selectedTripletStart = first;
+    selectedTripletSlot = 0;
+    markChanged();
+    setStatus("Converted selected instrument area to triplets");
 }
 
 void App::transposeSelected(int amount) {
-    Step &step = song.pattern[selectedChannel][selectedStep];
+    Step &step = selectedEvent();
     if (selectedChannel == 5) {
         if (step.note >= 0) {
             audio.preview(5, 60);
@@ -783,6 +983,8 @@ void App::transposeSelected(int amount) {
 }
 
 void App::selectCurrentCell() {
+    selectedTripletStart = -1;
+    selectedTripletSlot = -1;
     selectionAnchorChannel = selectedChannel;
     selectionAnchorStep = selectedStep;
     selectionEndChannel = selectedChannel;
@@ -822,12 +1024,36 @@ void App::copySelection(bool cut) {
     int columns = lastStep - firstStep + 1;
 
     std::ostringstream encoded;
-    encoded << "E16PATTERN 2 " << rows << ' ' << columns;
+    encoded << "E16PATTERN 4 " << rows << ' ' << columns;
     for (int channel = firstChannel; channel <= lastChannel; channel++) {
         for (int step = firstStep; step <= lastStep; step++) {
             const Step &event = song.pattern[channel][step];
             encoded << ' ' << event.note << ' ' << event.velocity << ' '
                     << event.tuning << ' ' << static_cast<int>(event.glide);
+        }
+    }
+    int tripletCount = 0;
+    for (int channel = firstChannel; channel <= lastChannel; channel++) {
+        for (int step = firstStep; step <= lastStep; step++) {
+            const TripletGroup &group = song.triplets[channel][step];
+            if (group.active && step + group.duration - 1 <= lastStep) {
+                tripletCount++;
+            }
+        }
+    }
+    encoded << ' ' << tripletCount;
+    for (int channel = firstChannel; channel <= lastChannel; channel++) {
+        for (int step = firstStep; step <= lastStep; step++) {
+            const TripletGroup &group = song.triplets[channel][step];
+            if (!group.active || step + group.duration - 1 > lastStep) {
+                continue;
+            }
+            encoded << ' ' << channel - firstChannel << ' ' << step - firstStep
+                    << ' ' << group.duration;
+            for (const Step &event : group.events) {
+                encoded << ' ' << event.note << ' ' << event.velocity << ' '
+                        << event.tuning << ' ' << static_cast<int>(event.glide);
+            }
         }
     }
     if (!SDL_SetClipboardText(encoded.str().c_str())) {
@@ -840,7 +1066,15 @@ void App::copySelection(bool cut) {
             for (int step = firstStep; step <= lastStep; step++) {
                 song.pattern[channel][step] = Step{};
             }
+            for (int step = 0; step <= lastStep; step++) {
+                TripletGroup &group = song.triplets[channel][step];
+                if (group.active && step + group.duration > firstStep) {
+                    group = TripletGroup{};
+                }
+            }
         }
+        selectedTripletStart = -1;
+        selectedTripletSlot = -1;
         markChanged();
     }
     setStatus(std::string(cut ? "Cut " : "Copied ") + std::to_string(rows) +
@@ -862,8 +1096,9 @@ void App::pasteSelection() {
     int rows = 0;
     int columns = 0;
     input >> signature >> version >> rows >> columns;
-    if (signature != "E16PATTERN" || (version != 1 && version != 2) || rows < 1 ||
-        rows > ChannelCount || columns < 1 || columns > MaxSteps) {
+    if (signature != "E16PATTERN" ||
+        (version != 1 && version != 2 && version != 3 && version != 4) ||
+        rows < 1 || rows > ChannelCount || columns < 1 || columns > MaxSteps) {
         setStatus("The clipboard does not contain E16 pattern data", 5000);
         return;
     }
@@ -882,13 +1117,68 @@ void App::pasteSelection() {
             return;
         }
     }
+    struct CopiedTriplet {
+        int row = 0;
+        int column = 0;
+        TripletGroup group;
+    };
+    std::vector<CopiedTriplet> copiedTriplets;
+    if (version >= 3) {
+        int count = 0;
+        input >> count;
+        if (count < 0 || count > rows * columns) {
+            setStatus("The clipboard contains invalid triplet data", 5000);
+            return;
+        }
+        copiedTriplets.resize(static_cast<std::size_t>(count));
+        for (CopiedTriplet &triplet : copiedTriplets) {
+            input >> triplet.row >> triplet.column;
+            triplet.group.active = true;
+            if (version >= 4) {
+                input >> triplet.group.duration;
+            } else {
+                triplet.group.duration = 2;
+            }
+            for (Step &event : triplet.group.events) {
+                int glide = 0;
+                input >> event.note >> event.velocity >> event.tuning >> glide;
+                event.glide = glide != 0;
+                if (event.note < Stop || event.note > 127 ||
+                    event.velocity < 1 || event.velocity > 127 ||
+                    event.tuning < -2400 || event.tuning > 2400) {
+                    setStatus("The clipboard contains invalid triplet data",
+                              5000);
+                    return;
+                }
+            }
+            if (!input || triplet.row < 0 || triplet.row >= rows ||
+                triplet.column < 0 || triplet.group.duration < 1 ||
+                triplet.column + triplet.group.duration > columns) {
+                setStatus("The clipboard contains invalid triplet data", 5000);
+                return;
+            }
+        }
+    }
 
     int pastedRows = std::min(rows, ChannelCount - selectedChannel);
     int pastedColumns = std::min(columns, song.stepCount - selectedStep);
     for (int row = 0; row < pastedRows; row++) {
+        for (int step = 0; step < selectedStep + pastedColumns; step++) {
+            TripletGroup &group = song.triplets[selectedChannel + row][step];
+            if (group.active && step + group.duration > selectedStep) {
+                group = TripletGroup{};
+            }
+        }
         for (int column = 0; column < pastedColumns; column++) {
             song.pattern[selectedChannel + row][selectedStep + column] =
                 copied[static_cast<std::size_t>(row * columns + column)];
+        }
+    }
+    for (const CopiedTriplet &triplet : copiedTriplets) {
+        if (triplet.row < pastedRows &&
+            triplet.column + triplet.group.duration <= pastedColumns) {
+            song.triplets[selectedChannel + triplet.row]
+                         [selectedStep + triplet.column] = triplet.group;
         }
     }
     selectionAnchorChannel = selectedChannel;
@@ -896,6 +1186,8 @@ void App::pasteSelection() {
     selectionEndChannel = selectedChannel + pastedRows - 1;
     selectionEndStep = selectedStep + pastedColumns - 1;
     selectionActive = true;
+    selectedTripletStart = -1;
+    selectedTripletSlot = -1;
     markChanged();
     setStatus("Pasted " + std::to_string(pastedRows) + " channel" +
               (pastedRows == 1 ? "" : "s") + " x " +
@@ -928,7 +1220,15 @@ void App::clearSelection() {
         for (int step = firstStep; step <= lastStep; step++) {
             song.pattern[channel][step] = Step{};
         }
+        for (int step = 0; step <= lastStep; step++) {
+            TripletGroup &group = song.triplets[channel][step];
+            if (group.active && step + group.duration > firstStep) {
+                group = TripletGroup{};
+            }
+        }
     }
+    selectedTripletStart = -1;
+    selectedTripletSlot = -1;
     markChanged();
     setStatus("Cleared the selected pattern cells");
 }

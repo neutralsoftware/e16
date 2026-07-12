@@ -15,6 +15,8 @@ SDL3 is the only runtime dependency.
 ## Workflow
 
 - Select a tone or wavetable channel and step, then click the one-octave keyboard or use `Z` through `M` and `Q` through `U` to enter notes.
+- Press `Cmd+Up` or `Cmd+Down` to transpose the selected note by one octave.
+- Select an area on one instrument and press `Cmd+T` or click `TRIPLET` to replace the complete selected duration with three independently editable triplet cells.
 - Use `.` or the Hold button to sustain the previous note into a step.
 - Use Delete, Backspace, the Rest button, or right-click to clear a step.
 - Use Space to start or stop the live preview.
