@@ -1,7 +1,10 @@
 #include "e16/sdl_host.h"
 
+#include "e16/log.h"
+
 #include <algorithm>
 #include <cstdlib>
+#include <sstream>
 
 namespace e16 {
 
@@ -16,6 +19,19 @@ constexpr std::uint16_t ButtonX = 1u << 6;
 constexpr std::uint16_t ButtonY = 1u << 7;
 constexpr std::uint16_t ButtonStart = 1u << 8;
 constexpr std::uint16_t ButtonSelect = 1u << 9;
+
+void sdlLog(void *, int, SDL_LogPriority, const char *message) {
+    logInfo(std::string("SDL: ") + (message ? message : ""));
+}
+
+std::string environmentValue(const char *name) {
+    SDL_Environment *environment = SDL_GetEnvironment();
+    if (!environment) {
+        return "<unavailable>";
+    }
+    const char *value = SDL_GetEnvironmentVariable(environment, name);
+    return value ? value : "<unset>";
+}
 
 std::uint16_t keyboardPad0() {
     const bool *keys = SDL_GetKeyboardState(nullptr);
@@ -54,8 +70,7 @@ bool escapePressed() {
 }
 
 bool exitPressed(SDL_Gamepad *gamepad) {
-    return gamepad &&
-           SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_BACK) &&
+    return gamepad && SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_BACK) &&
            SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_START);
 }
 
@@ -70,18 +85,17 @@ std::uint16_t gamepadButtons(SDL_Gamepad *gamepad) {
     const Sint16 leftX = SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFTX);
     const Sint16 leftY = SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFTY);
 
-    const bool right = leftX > AxisDeadZone ||
-                       SDL_GetGamepadButton(
-                           gamepad, SDL_GAMEPAD_BUTTON_DPAD_RIGHT);
-    const bool left = leftX < -AxisDeadZone ||
-                      SDL_GetGamepadButton(
-                          gamepad, SDL_GAMEPAD_BUTTON_DPAD_LEFT);
-    const bool down = leftY > AxisDeadZone ||
-                      SDL_GetGamepadButton(
-                          gamepad, SDL_GAMEPAD_BUTTON_DPAD_DOWN);
+    const bool right =
+        leftX > AxisDeadZone ||
+        SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_RIGHT);
+    const bool left =
+        leftX < -AxisDeadZone ||
+        SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_LEFT);
+    const bool down =
+        leftY > AxisDeadZone ||
+        SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_DOWN);
     const bool up = leftY < -AxisDeadZone ||
-                    SDL_GetGamepadButton(gamepad,
-                                         SDL_GAMEPAD_BUTTON_DPAD_UP);
+                    SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_UP);
 
     pad |= right && !left ? ButtonRight : 0;
     pad |= left && !right ? ButtonLeft : 0;
@@ -110,13 +124,36 @@ SdlHost::~SdlHost() {
 }
 
 bool SdlHost::open(int scale, Apu &apu, bool forceHeadless) {
+    SDL_SetLogOutputFunction(sdlLog, nullptr);
+    int version = SDL_GetVersion();
+    std::ostringstream versionText;
+    versionText << "SDL version " << SDL_VERSIONNUM_MAJOR(version) << '.'
+                << SDL_VERSIONNUM_MINOR(version) << '.'
+                << SDL_VERSIONNUM_MICRO(version) << " revision ";
+    const char *revision = SDL_GetRevision();
+    versionText << (revision ? revision : "unknown");
+    logInfo(versionText.str());
+    logInfo("environment: XDG_SESSION_TYPE=" +
+            environmentValue("XDG_SESSION_TYPE") +
+            " WAYLAND_DISPLAY=" + environmentValue("WAYLAND_DISPLAY") +
+            " DISPLAY=" + environmentValue("DISPLAY"));
+    logInfo("environment: SDL_VIDEO_DRIVER=" +
+            environmentValue("SDL_VIDEO_DRIVER") +
+            " SDL_RENDER_DRIVER=" + environmentValue("SDL_RENDER_DRIVER") +
+            " MESA_GL_VERSION_OVERRIDE=" +
+            environmentValue("MESA_GL_VERSION_OVERRIDE"));
     apuDevice = &apu;
     headless = forceHeadless;
-    if (!SDL_Init(SDL_INIT_EVENTS | SDL_INIT_GAMEPAD)) {
+    if (!SDL_Init(SDL_INIT_EVENTS)) {
         errorText = SDL_GetError();
         return false;
     }
-    openAvailableGamepads();
+    gamepadInitialized = SDL_InitSubSystem(SDL_INIT_GAMEPAD);
+    if (gamepadInitialized) {
+        openAvailableGamepads();
+    } else {
+        logInfo("gamepad disabled: " + std::string(SDL_GetError()));
+    }
 
     if (SDL_InitSubSystem(SDL_INIT_AUDIO)) {
         SDL_AudioSpec spec{};
@@ -126,20 +163,51 @@ bool SdlHost::open(int scale, Apu &apu, bool forceHeadless) {
         audio = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,
                                           &spec, audioCallback, this);
         if (audio && !SDL_ResumeAudioStreamDevice(audio)) {
+            logInfo("audio resume failed: " + std::string(SDL_GetError()));
             SDL_DestroyAudioStream(audio);
             audio = nullptr;
+        } else if (!audio) {
+            logInfo("audio stream unavailable: " + std::string(SDL_GetError()));
         }
+    } else {
+        logInfo("audio disabled: " + std::string(SDL_GetError()));
     }
 
     if (headless) {
         return true;
     }
     if (!SDL_InitSubSystem(SDL_INIT_VIDEO)) {
-        errorText = SDL_GetError();
-        return false;
+        std::string firstError = SDL_GetError();
+        SDL_Environment *environment = SDL_GetEnvironment();
+        if (!environment) {
+            errorText = firstError;
+            return false;
+        }
+        const char *forcedValue =
+            SDL_GetEnvironmentVariable(environment, "SDL_VIDEO_DRIVER");
+        std::string forcedDriver = forcedValue ? forcedValue : "";
+        if (forcedDriver.empty()) {
+            errorText = firstError;
+            return false;
+        }
+        logInfo("video driver " + forcedDriver + " failed: " + firstError);
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        SDL_UnsetEnvironmentVariable(environment, "SDL_VIDEO_DRIVER");
+        bool initialized = SDL_InitSubSystem(SDL_INIT_VIDEO);
+        std::string fallbackError = initialized ? "" : SDL_GetError();
+        SDL_SetEnvironmentVariable(environment, "SDL_VIDEO_DRIVER",
+                                   forcedDriver.c_str(), true);
+        if (!initialized) {
+            errorText =
+                firstError + "; automatic fallback failed: " + fallbackError;
+            return false;
+        }
     }
+    const char *videoDriver = SDL_GetCurrentVideoDriver();
+    logInfo("video driver: " +
+            std::string(videoDriver ? videoDriver : "unknown"));
     window = SDL_CreateWindow("Ember-16", ScreenWidth * scale,
-                              ScreenHeight * scale, SDL_WINDOW_FULLSCREEN);
+                              ScreenHeight * scale, 0);
     if (!window) {
         errorText = SDL_GetError();
         return false;
@@ -148,29 +216,91 @@ bool SdlHost::open(int scale, Apu &apu, bool forceHeadless) {
     SDL_RaiseWindow(window);
     SDL_HideCursor();
     cursorHidden = true;
-    const char *rendererName =
-        std::getenv("MESA_GL_VERSION_OVERRIDE") ? "software" : nullptr;
-    renderer = SDL_CreateRenderer(window, rendererName);
+    const bool mesaOverride =
+        environmentValue("MESA_GL_VERSION_OVERRIDE") != "<unset>";
+    if (mesaOverride) {
+        if (!createRenderer("software") && !createRenderer(nullptr)) {
+            return false;
+        }
+    } else {
+        if (!createRenderer(nullptr) && !createRenderer("software")) {
+            return false;
+        }
+    }
+    if (!createTexture()) {
+        logInfo(errorText);
+        bool failedSoftware = softwareRenderer;
+        SDL_DestroyRenderer(renderer);
+        renderer = nullptr;
+        if (!createRenderer(failedSoftware ? nullptr : "software") ||
+            !createTexture()) {
+            return false;
+        }
+    }
+    if (!SDL_RenderClear(renderer) || !SDL_RenderPresent(renderer)) {
+        errorText =
+            "initial presentation failed: " + std::string(SDL_GetError());
+        logInfo(errorText);
+        bool failedSoftware = softwareRenderer;
+        SDL_DestroyTexture(texture);
+        SDL_DestroyRenderer(renderer);
+        texture = nullptr;
+        renderer = nullptr;
+        if (!createRenderer(failedSoftware ? nullptr : "software") ||
+            !createTexture() || !SDL_RenderClear(renderer) ||
+            !SDL_RenderPresent(renderer)) {
+            errorText =
+                "fallback presentation failed: " + std::string(SDL_GetError());
+            return false;
+        }
+    }
+    if (!SDL_SetWindowFullscreen(window, true)) {
+        logInfo("fullscreen unavailable, continuing windowed: " +
+                std::string(SDL_GetError()));
+    } else if (!SDL_SyncWindow(window)) {
+        logInfo("fullscreen synchronization failed: " +
+                std::string(SDL_GetError()));
+    } else {
+        logInfo("fullscreen active");
+    }
+    return true;
+}
+
+bool SdlHost::createRenderer(const char *name) {
+    renderer = SDL_CreateRenderer(window, name);
     if (!renderer) {
-        errorText = SDL_GetError();
-        SDL_DestroyWindow(window);
-        window = nullptr;
+        errorText = "renderer " + std::string(name ? name : "default") +
+                    " failed: " + SDL_GetError();
+        logInfo(errorText);
         return false;
     }
-    SDL_SetRenderLogicalPresentation(renderer, ScreenWidth, ScreenHeight,
-                                     SDL_LOGICAL_PRESENTATION_LETTERBOX);
+    const char *selected = SDL_GetRendererName(renderer);
+    std::string selectedName = selected ? selected : "unknown";
+    softwareRenderer = selectedName == "software";
+    logInfo("renderer: " + selectedName);
+    return true;
+}
+
+bool SdlHost::createTexture() {
+    if (!SDL_SetRenderLogicalPresentation(renderer, ScreenWidth, ScreenHeight,
+                                          SDL_LOGICAL_PRESENTATION_LETTERBOX)) {
+        errorText =
+            "logical presentation failed: " + std::string(SDL_GetError());
+        return false;
+    }
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
                                 SDL_TEXTUREACCESS_STREAMING, ScreenWidth,
                                 ScreenHeight);
     if (!texture) {
-        errorText = SDL_GetError();
-        SDL_DestroyRenderer(renderer);
-        SDL_DestroyWindow(window);
-        renderer = nullptr;
-        window = nullptr;
+        errorText = "texture creation failed: " + std::string(SDL_GetError());
         return false;
     }
-    SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
+    if (!SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST)) {
+        errorText = "texture scaling failed: " + std::string(SDL_GetError());
+        SDL_DestroyTexture(texture);
+        texture = nullptr;
+        return false;
+    }
     return true;
 }
 
@@ -207,15 +337,50 @@ void SdlHost::enableTwoPlayerControls() {
     twoPlayerControls = true;
 }
 
-void SdlHost::present(const Flame &flame) {
-    if (headless) {
-        return;
-    }
+bool SdlHost::presentFrame(const Flame &flame) {
     const auto &fb = flame.framebuffer();
-    SDL_UpdateTexture(texture, nullptr, fb.data(), ScreenWidth * 4);
-    SDL_RenderClear(renderer);
-    SDL_RenderTexture(renderer, texture, nullptr, nullptr);
-    SDL_RenderPresent(renderer);
+    if (!SDL_UpdateTexture(texture, nullptr, fb.data(), ScreenWidth * 4)) {
+        errorText = "texture update failed: " + std::string(SDL_GetError());
+        return false;
+    }
+    if (!SDL_RenderClear(renderer)) {
+        errorText = "render clear failed: " + std::string(SDL_GetError());
+        return false;
+    }
+    if (!SDL_RenderTexture(renderer, texture, nullptr, nullptr)) {
+        errorText = "texture rendering failed: " + std::string(SDL_GetError());
+        return false;
+    }
+    if (!SDL_RenderPresent(renderer)) {
+        errorText = "presentation failed: " + std::string(SDL_GetError());
+        return false;
+    }
+    return true;
+}
+
+bool SdlHost::present(const Flame &flame) {
+    if (headless) {
+        return true;
+    }
+    if (presentFrame(flame)) {
+        return true;
+    }
+    logInfo(errorText);
+    if (rendererRecoveryAttempted) {
+        return false;
+    }
+    rendererRecoveryAttempted = true;
+    bool failedSoftware = softwareRenderer;
+    logInfo("recovering presentation with alternate renderer");
+    SDL_DestroyTexture(texture);
+    SDL_DestroyRenderer(renderer);
+    texture = nullptr;
+    renderer = nullptr;
+    if (!createRenderer(failedSoftware ? nullptr : "software") ||
+        !createTexture()) {
+        return false;
+    }
+    return presentFrame(flame);
 }
 
 const std::string &SdlHost::error() const { return errorText; }
@@ -236,6 +401,10 @@ void SdlHost::close() {
         renderer = nullptr;
     }
     closeAllGamepads();
+    if (gamepadInitialized) {
+        SDL_QuitSubSystem(SDL_INIT_GAMEPAD);
+        gamepadInitialized = false;
+    }
     if (window) {
         SDL_DestroyWindow(window);
         window = nullptr;

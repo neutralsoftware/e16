@@ -25,7 +25,7 @@ class SdlHost {
     bool open(int scale, Apu &apu, bool forceHeadless);
     bool poll(Memory &memory);
     void enableTwoPlayerControls();
-    void present(const Flame &flame);
+    bool present(const Flame &flame);
     const std::string &error() const;
     bool isHeadless() const;
 
@@ -46,8 +46,14 @@ class SdlHost {
     bool twoPlayerControls = false;
     bool headless = false;
     bool cursorHidden = false;
+    bool gamepadInitialized = false;
+    bool softwareRenderer = false;
+    bool rendererRecoveryAttempted = false;
 
     void close();
+    bool createRenderer(const char *name);
+    bool createTexture();
+    bool presentFrame(const Flame &flame);
     void openAvailableGamepads();
     void openGamepad(SDL_JoystickID instanceId);
     void closeGamepad(SDL_JoystickID instanceId);

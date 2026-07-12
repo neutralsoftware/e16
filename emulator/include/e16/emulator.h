@@ -35,7 +35,7 @@ class Emulator {
     Debugger debugger;
     SdlHost sdl;
 
-    void runFrame();
+    bool runFrame();
 };
 
 }

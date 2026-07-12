@@ -1,15 +1,17 @@
 #include "e16/emulator.h"
 
-#include "e16/disassembler.h"
 #include "bios_data.h"
+#include "e16/disassembler.h"
+#include "e16/log.h"
 
-#include <chrono>
 #include <cctype>
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
+#include <stdexcept>
 #include <thread>
 #include <utility>
 
@@ -49,10 +51,19 @@ Emulator::Emulator(EmulatorOptions options)
 
 int Emulator::run() {
     static_assert(BiosData.size() <= BiosRomEnd - BiosRomBase + 1);
+    std::filesystem::path programPath =
+        std::filesystem::absolute(options.programPath).lexically_normal();
+    std::vector<std::uint8_t> program = readFile(programPath.string());
+    if (program.empty()) {
+        throw std::runtime_error("program is empty: " + programPath.string());
+    }
+    logInfo("program: " + programPath.string() +
+            " bytes=" + std::to_string(program.size()) +
+            " load-address=" + hex(options.loadAddress, 6));
     memory.reset();
     flame.reset();
     apu.reset();
-    memory.load(options.loadAddress, readFile(options.programPath));
+    memory.load(options.loadAddress, program);
     memory.load(BiosRomBase,
                 std::vector<std::uint8_t>(BiosData.begin(), BiosData.end()));
     std::string savePath = savePathFor(options.programPath);
@@ -60,20 +71,22 @@ int Emulator::run() {
     cpu.reset(BiosRomBase);
 
     if (!sdl.open(options.scale, apu, options.headless)) {
-        std::cerr << "SDL: " << sdl.error() << "\n";
+        logError("SDL: " + sdl.error());
         return 1;
     }
     if (sdl.isHeadless()) {
-        std::cerr << "e16emu: running headless\n";
+        logInfo("running headless");
     }
 
     bool running = true;
+    int result = 0;
     auto frameTime = std::chrono::microseconds(1000000 / RefreshRate);
 
     while (running) {
         auto started = std::chrono::steady_clock::now();
         running = sdl.poll(memory);
         if (!running) {
+            logInfo("exit requested by window or controller input");
             break;
         }
 
@@ -81,9 +94,12 @@ int Emulator::run() {
             debugger.repl();
         }
 
-        runFrame();
+        if (!runFrame()) {
+            result = 1;
+            break;
+        }
         if (memory.consumeSaveRamFirstWrite()) {
-            std::cerr << "e16emu: save RAM: " << savePath << "\n";
+            logInfo("save RAM: " + savePath);
         }
         memory.flushSaveRam();
         if (memory.consumeInputPad1Read()) {
@@ -98,9 +114,14 @@ int Emulator::run() {
         } else {
             cpu.wake();
         }
-        sdl.present(flame);
+        if (!sdl.present(flame)) {
+            logError("SDL: " + sdl.error());
+            result = 1;
+            break;
+        }
 
         if (cpu.halted()) {
+            logInfo("CPU halted normally");
             running = false;
         }
 
@@ -111,10 +132,10 @@ int Emulator::run() {
     }
 
     memory.flushSaveRam();
-    return 0;
+    return result;
 }
 
-void Emulator::runFrame() {
+bool Emulator::runFrame() {
     for (int i = 0; i < InstructionsPerFrame; i++) {
         if (debugger.enabled && debugger.shouldBreak()) {
             break;
@@ -122,28 +143,28 @@ void Emulator::runFrame() {
         StopReason reason = cpu.step();
         if (reason == StopReason::Fault) {
             Disassembler disassembler(memory);
-            DecodedInstruction decoded = disassembler.decode(cpu.faultAddress());
-            std::cerr << "Runtime error at " << hex(cpu.faultAddress(), 6)
-                      << ": " << cpu.fault() << "\n"
-                      << decoded.text << "\n";
+            DecodedInstruction decoded =
+                disassembler.decode(cpu.faultAddress());
+            logError("Runtime error at " + hex(cpu.faultAddress(), 6) + ": " +
+                     cpu.fault() + " | " + decoded.text);
             if (debugger.enabled) {
                 debugger.repl();
             }
-            break;
+            return false;
         }
         if (reason == StopReason::Trap) {
             if (debugger.enabled) {
                 debugger.repl();
                 continue;
             }
-            std::cerr << "Runtime trap at " << hex(mask24(cpu.state().pc - 1), 6)
-                      << "\n";
-            break;
+            logError("Runtime trap at " + hex(mask24(cpu.state().pc - 1), 6));
+            return false;
         }
         if (reason == StopReason::Halted || reason == StopReason::Waiting) {
             break;
         }
     }
+    return true;
 }
 
 }

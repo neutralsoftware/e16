@@ -147,6 +147,8 @@ usage: e16emu [-s] [--headless] [--load-address addr] [--scale n] program.bin
 - The emulator opens fullscreen by default and letterboxes the 320x180 display.
 - If SDL cannot initialize graphical output, the emulator reports the SDL error and exits.
 - If a Mesa OpenGL version override is inherited, the emulator uses SDL's software renderer to avoid incompatible OpenGL contexts.
+- Every launch writes a fresh diagnostic log to the platform temporary directory (`/tmp/e16.log` on Linux), including the SDL version, display environment, selected video and render drivers, fallback decisions, runtime faults, fatal exceptions, signals, and the final exit code.
+- Gamepad and audio initialization failures do not prevent graphical execution. Invalid forced SDL video drivers, failed accelerated renderers, unavailable fullscreen modes, and presentation failures automatically use safe fallbacks where possible.
 - The graphical emulator uses nearest-neighbor presentation, hides the cursor, and never opens modal SDL message boxes.
 - Gamepads are supported for up to two players. D-pads and left sticks map to directions; South/East/West/North map to A/B/X/Y; Start maps to Start; Back maps to Select.
 - Escape or Back+Start / Minus+Plus exits the emulator.
