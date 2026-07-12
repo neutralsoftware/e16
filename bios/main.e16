@@ -1,0 +1,91 @@
+jmp start
+
+.include "./interrupts.e16"
+
+.const STACK_ADDR, 0x40000
+.const BIOS_IVT_ADDR, 0xFEFFD0
+
+start: 
+    ; BIOS entry point
+    set dp, 0x0000
+    set sp, STACK_ADDR
+    set fp, STACK_ADDR
+
+    di
+
+clear_registers:
+    clr r0
+    clr r1
+    clr r2
+    clr r3
+    clr r4
+    clr r5
+    clr r6
+    clr r7
+    clr r8
+    clr r9
+    clr r10
+    clr r11
+    clr r12
+    clr r13
+    clr r14
+    clr r15
+
+init_interrupts:
+    di
+
+    set ivt, BIOS_IVT_ADDR
+
+    mov r0, 0
+    storeb @INT_ENABLE_LO, r0
+    storeb @INT_ENABLE_HI, r0 
+
+    store @frame_ready, r0
+    store @frame_counter, r0
+    store @timer_ticks, r0
+    store @input_ready, r0
+    store @audio_ticks, r0
+    store @audio_event, r0
+    store @dma_done, r0
+    store @cart_ready, r0
+    store @last_interrupt, r0
+    store @invalid_irq_count, r0
+    
+.const VPU_CONTROL, 0xFF1000
+.const APU_CONTROL, 0xFF2000
+.const APU_MASTER_VOL, 0xFF2004
+
+disable_peripherals:
+    clr r0
+
+    store @VPU_CONTROL, r0
+    store @APU_CONTROL, r0
+    store @APU_MASTER_VOL, r0
+
+enter_rom:
+    ei
+    set pc, 0x200000
+    ; This will jump to the ROM code at address 0x200000
+
+.locate BIOS_IVT_ADDR
+
+bios_ivt:
+    .addressOf bios_system_default
+    .addressOf bios_vblank_default
+    .addressOf bios_timer_default
+    .addressOf bios_input_default
+
+    .addressOf bios_audio_default
+    .addressOf bios_dma_default
+    .addressOf bios_cartridge_default
+    .addressOf bios_vblank_end_default
+
+    .addressOf bios_hblank_default
+    .addressOf bios_pcm_default
+    .addressOf bios_invalid_access_default
+    .addressOf bios_debug_default
+
+    .addressOf bios_reserved_12
+    .addressOf bios_reserved_13
+    .addressOf bios_reserved_14
+    .addressOf bios_reserved_15

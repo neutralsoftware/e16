@@ -16,6 +16,10 @@ file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
 add_executable(e16musicmaker ${SOURCES})
 target_include_directories(e16musicmaker PRIVATE "${CMAKE_SOURCE_DIR}/include")
 
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(SNDFILE REQUIRED IMPORTED_TARGET sndfile)
+target_link_libraries(e16musicmaker PRIVATE PkgConfig::SNDFILE)
+
 find_package(SDL3 QUIET)
 if(SDL3_FOUND)
     if(TARGET SDL3::SDL3)
@@ -25,7 +29,6 @@ if(SDL3_FOUND)
         target_link_libraries(e16musicmaker PRIVATE ${SDL3_LIBRARIES})
     endif()
 else()
-    find_package(PkgConfig REQUIRED)
     pkg_check_modules(SDL3 REQUIRED IMPORTED_TARGET sdl3)
     target_link_libraries(e16musicmaker PRIVATE PkgConfig::SDL3)
 endif()

@@ -85,12 +85,12 @@ clean: CMakeFiles/e16musicmaker.dir/clean
 CMakeFiles/e16musicmaker.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/e16musicmaker.dir/build.make CMakeFiles/e16musicmaker.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/e16musicmaker.dir/build.make CMakeFiles/e16musicmaker.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/maxvdec/Coding/Projects/E16/musicMaker/build/CMakeFiles --progress-num=1,2,3,4,5 "Built target e16musicmaker"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/maxvdec/Coding/Projects/E16/musicMaker/build/CMakeFiles --progress-num=1,2,3,4,5,6 "Built target e16musicmaker"
 .PHONY : CMakeFiles/e16musicmaker.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/e16musicmaker.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/maxvdec/Coding/Projects/E16/musicMaker/build/CMakeFiles 5
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/maxvdec/Coding/Projects/E16/musicMaker/build/CMakeFiles 6
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/e16musicmaker.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/maxvdec/Coding/Projects/E16/musicMaker/build/CMakeFiles 0
 .PHONY : CMakeFiles/e16musicmaker.dir/rule
@@ -102,7 +102,7 @@ e16musicmaker: CMakeFiles/e16musicmaker.dir/rule
 # codegen rule for target.
 CMakeFiles/e16musicmaker.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/e16musicmaker.dir/build.make CMakeFiles/e16musicmaker.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/maxvdec/Coding/Projects/E16/musicMaker/build/CMakeFiles --progress-num=1,2,3,4,5 "Finished codegen for target e16musicmaker"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/maxvdec/Coding/Projects/E16/musicMaker/build/CMakeFiles --progress-num=1,2,3,4,5,6 "Finished codegen for target e16musicmaker"
 .PHONY : CMakeFiles/e16musicmaker.dir/codegen
 
 # clean rule for target.

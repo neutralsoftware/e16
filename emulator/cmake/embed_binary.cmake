@@ -1,0 +1,5 @@
+file(READ "${INPUT}" DATA HEX)
+string(LENGTH "${DATA}" DATA_HEX_LENGTH)
+math(EXPR DATA_LENGTH "${DATA_HEX_LENGTH} / 2")
+string(REGEX REPLACE "([0-9a-fA-F][0-9a-fA-F])" "0x\\1," DATA "${DATA}")
+file(WRITE "${OUTPUT}" "#ifndef E16_BIOS_DATA_H\n#define E16_BIOS_DATA_H\n#include <array>\n#include <cstdint>\nnamespace e16 { inline constexpr std::array<std::uint8_t, ${DATA_LENGTH}> BiosData = {${DATA}}; }\n#endif\n")

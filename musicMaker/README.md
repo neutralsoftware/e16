@@ -23,6 +23,9 @@ SDL3 is the only runtime dependency.
 - Record up to two seconds from the default microphone for the PCM channel, preview it, place triggers, choose one-shot or looping playback, and optionally trim leading silence automatically.
 - Empty PCM steps let a one-shot finish naturally; use an explicit Stop event to end a looping sample.
 - Drag across tracker cells to select a rectangular region. Shift-click or Shift+Arrow extends the selection; `Ctrl+C`, `Ctrl+X`, `Ctrl+V`, and `Ctrl+A` copy, cut, paste, and select all. On macOS, the corresponding Command shortcuts work too.
+- Select any tracker cell and press Play or Space to start preview playback from that step.
+- Each note has its own Note Vol, frequency tuning from -2400 to +2400 cents, and optional Glissando. Glissando slides from the channel's previous sounding pitch into the selected note in both preview and exported E16 playback.
+- The PCM channel can record from a microphone or import MP3, WAV, FLAC, and Ogg files. Imports are mixed to mono, resampled to 8 kHz, normalized, optionally trimmed, and limited to two seconds for E16 Audio RAM.
 - Save editable projects as `.e16music` and export game modules as `.e16`.
 
 The MaxPages selector supports between 1 and 50 pages. Each page contains 16 steps, for a maximum song length of 800 steps.

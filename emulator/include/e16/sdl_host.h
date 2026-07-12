@@ -25,6 +25,7 @@ class SdlHost {
     bool open(int scale, Apu &apu);
     bool poll(Memory &memory);
     void enableTwoPlayerControls();
+    void showSaveRamNotice(const std::string &path) const;
     void present(const Flame &flame);
     const std::string &error() const;
 

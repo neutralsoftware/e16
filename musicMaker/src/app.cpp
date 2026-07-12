@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <filesystem>
 #include <sstream>
@@ -18,10 +19,10 @@ constexpr float GridWidth = 1080.0f;
 constexpr float RowHeight = 58.0f;
 constexpr int VisibleSteps = StepsPerPage;
 
-constexpr SDL_Color Background{13, 17, 27, 255};
-constexpr SDL_Color Surface{24, 30, 45, 255};
-constexpr SDL_Color SurfaceRaised{34, 42, 60, 255};
-constexpr SDL_Color Border{58, 69, 91, 255};
+constexpr SDL_Color Background{9, 12, 20, 255};
+constexpr SDL_Color Surface{20, 25, 38, 255};
+constexpr SDL_Color SurfaceRaised{31, 38, 55, 255};
+constexpr SDL_Color Border{67, 79, 104, 255};
 constexpr SDL_Color Text{226, 232, 240, 255};
 constexpr SDL_Color Muted{139, 151, 170, 255};
 constexpr SDL_Color Cyan{66, 211, 210, 255};
@@ -119,7 +120,25 @@ void App::processEvents() {
         } else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
             handleWheel(event.wheel);
         } else if (event.type == SDL_EVENT_DROP_FILE && event.drop.data) {
-            if (confirmDiscard()) {
+            std::filesystem::path dropped(event.drop.data);
+            std::string extension = dropped.extension().string();
+            std::transform(extension.begin(), extension.end(), extension.begin(),
+                           [](unsigned char value) { return std::tolower(value); });
+            if (extension == ".mp3" || extension == ".wav" ||
+                extension == ".flac" || extension == ".ogg") {
+                std::vector<std::uint8_t> imported;
+                std::string error;
+                if (importPcmFile(event.drop.data, song.trimPcmSilence, imported,
+                                  error)) {
+                    song.pcmSample = std::move(imported);
+                    selectedChannel = 5;
+                    markChanged();
+                    setStatus("Imported PCM audio from " + dropped.filename().string(),
+                              6000);
+                } else {
+                    setStatus("Could not import audio: " + error, 6000);
+                }
+            } else if (confirmDiscard()) {
                 openProject(event.drop.data);
             }
         }
@@ -151,7 +170,8 @@ void App::render() {
                            Background.a);
     SDL_RenderClear(renderer);
 
-    drawRect({0, 0, WindowWidth, 58}, Surface, true);
+    drawRect({0, 0, WindowWidth, 58}, SurfaceRaised, true);
+    drawRect({0, 56, WindowWidth, 2}, Cyan, true);
     drawText(20, 16, "E16 MUSIC MAKER", Text, 1.6f);
     drawText(244, 20, song.title + (dirty ? "  *" : ""), Muted, 1.0f);
     drawText(1100, 20, "6-CHANNEL APU", Cyan, 1.0f);
@@ -160,7 +180,10 @@ void App::render() {
     drawButton({89, 76, 62, 34}, "OPEN", false, Cyan);
     drawButton({158, 76, 62, 34}, "SAVE", false, Cyan);
     drawButton({227, 76, 78, 34}, "EXPORT", false, Green);
-    drawButton({326, 76, 82, 34}, audio.isPlaying() ? "STOP" : "PLAY",
+    std::string playLabel = audio.isPlaying()
+                                ? "STOP"
+                                : "PLAY @" + std::to_string(selectedStep + 1);
+    drawButton({326, 76, 82, 34}, playLabel,
                audio.isPlaying(), Pink);
 
     drawText(435, 88, "BPM " + std::to_string(song.bpm), Text);
@@ -240,6 +263,12 @@ void App::render() {
                 channel == 5 && event.note >= 0 ? "SMP" : noteName(event.note);
             drawText(x + 9, y + 20, cellText, noteColor);
             if (event.note >= 0) {
+                if (event.glide) {
+                    drawText(x + cellWidth - 15, y + 7, "G", Purple);
+                } else if (event.tuning != 0) {
+                    drawText(x + cellWidth - 15, y + 7,
+                             event.tuning > 0 ? "+" : "-", Blue);
+                }
                 float meter = (cellWidth - 14) * event.velocity / 127.0f;
                 drawRect({x + 7, y + 43, meter, 3}, ChannelColors[channel],
                          true);
@@ -260,21 +289,23 @@ void App::render() {
                  "  SELECT " + std::to_string(selectedRows) + "x" +
                  std::to_string(selectedColumns),
              Text, 1.15f);
+    drawRect({12, 548, 928, 48}, Surface, true);
     drawText(20, 576, "OCTAVE " + std::to_string(octave), Muted);
     drawButton({98, 562, 32, 34}, "-", false, Cyan);
     drawButton({136, 562, 32, 34}, "+", false, Cyan);
-    drawText(205, 576, "VELOCITY " + std::to_string(selected.velocity), Muted);
+    drawText(205, 576, "NOTE VOL " + std::to_string(selected.velocity), Muted);
     drawButton({302, 562, 32, 34}, "-", false, Pink);
     drawButton({340, 562, 32, 34}, "+", false, Pink);
     drawButton({405, 562, 74, 34}, selectedChannel == 5 ? "STOP" : "HOLD",
                selected.note == (selectedChannel == 5 ? Stop : Hold), Yellow);
     drawButton({486, 562, 74, 34}, selectedChannel == 5 ? "EMPTY" : "REST",
                selected.note == Rest, Red);
-    drawText(590, 576,
-             selectedChannel == 5
-                 ? "Enter places the sample   Stop explicitly ends a loop"
-                 : "Keyboard: Z-M / Q-U notes   Space play   . hold   Del rest",
-             Muted);
+    std::string tuning = (selected.tuning >= 0 ? "+" : "") +
+                         std::to_string(selected.tuning) + "c";
+    drawText(590, 576, "FREQ " + tuning, Muted);
+    drawButton({680, 562, 32, 34}, "-", false, Blue);
+    drawButton({718, 562, 32, 34}, "+", false, Blue);
+    drawButton({770, 562, 92, 34}, "GLISSANDO", selected.glide, Purple);
 
     if (selectedChannel == 4) {
         drawWavetableEditor();
@@ -328,9 +359,8 @@ void App::render() {
              Cyan);
     drawText(
         20, 875,
-        "Right-click a cell to clear it. Mouse wheel or Up/Down transposes. "
-        "Drag-select cells. Ctrl/Cmd+C, X, V and A copy, cut, paste and select "
-        "all.",
+        "Select a cell to choose the playback start. Per-note volume, tuning "
+        "and glissando are copied with pattern selections.",
         Muted);
 
     SDL_RenderPresent(renderer);
@@ -364,7 +394,7 @@ void App::handleKey(const SDL_KeyboardEvent &event) {
     }
 
     if (event.scancode == SDL_SCANCODE_SPACE) {
-        audio.toggle();
+        audio.toggle(selectedStep);
         return;
     }
     if (event.scancode == SDL_SCANCODE_LEFT) {
@@ -479,7 +509,7 @@ void App::handleMouse(const SDL_MouseButtonEvent &event) {
             return;
         }
         if (contains({326, 76, 82, 34}, x, y)) {
-            audio.toggle();
+            audio.toggle(selectedStep);
             return;
         }
         if (contains({500, 76, 30, 34}, x, y) ||
@@ -588,6 +618,20 @@ void App::handleMouse(const SDL_MouseButtonEvent &event) {
         markChanged();
         return;
     }
+    if (contains({680, 562, 32, 34}, x, y) ||
+        contains({718, 562, 32, 34}, x, y)) {
+        Step &step = song.pattern[selectedChannel][selectedStep];
+        step.tuning =
+            std::clamp(step.tuning + (x < 712 ? -25 : 25), -2400, 2400);
+        markChanged();
+        return;
+    }
+    if (contains({770, 562, 92, 34}, x, y)) {
+        Step &step = song.pattern[selectedChannel][selectedStep];
+        step.glide = !step.glide;
+        markChanged();
+        return;
+    }
     if (selectedChannel == 4) {
         if (contains({20, 620, 920, 120}, x, y)) {
             editWavetable(x, y);
@@ -635,6 +679,10 @@ void App::handleMouse(const SDL_MouseButtonEvent &event) {
             setStatus(song.trimPcmSilence
                           ? "Automatic leading-silence trimming enabled"
                           : "Automatic leading-silence trimming disabled");
+            return;
+        }
+        if (contains({580, 750, 104, 34}, x, y)) {
+            importPcmDialog();
             return;
         }
     } else {
@@ -774,11 +822,12 @@ void App::copySelection(bool cut) {
     int columns = lastStep - firstStep + 1;
 
     std::ostringstream encoded;
-    encoded << "E16PATTERN 1 " << rows << ' ' << columns;
+    encoded << "E16PATTERN 2 " << rows << ' ' << columns;
     for (int channel = firstChannel; channel <= lastChannel; channel++) {
         for (int step = firstStep; step <= lastStep; step++) {
             const Step &event = song.pattern[channel][step];
-            encoded << ' ' << event.note << ' ' << event.velocity;
+            encoded << ' ' << event.note << ' ' << event.velocity << ' '
+                    << event.tuning << ' ' << static_cast<int>(event.glide);
         }
     }
     if (!SDL_SetClipboardText(encoded.str().c_str())) {
@@ -813,7 +862,7 @@ void App::pasteSelection() {
     int rows = 0;
     int columns = 0;
     input >> signature >> version >> rows >> columns;
-    if (signature != "E16PATTERN" || version != 1 || rows < 1 ||
+    if (signature != "E16PATTERN" || (version != 1 && version != 2) || rows < 1 ||
         rows > ChannelCount || columns < 1 || columns > MaxSteps) {
         setStatus("The clipboard does not contain E16 pattern data", 5000);
         return;
@@ -821,8 +870,14 @@ void App::pasteSelection() {
     std::vector<Step> copied(static_cast<std::size_t>(rows * columns));
     for (Step &event : copied) {
         input >> event.note >> event.velocity;
+        if (version >= 2) {
+            int glide = 0;
+            input >> event.tuning >> glide;
+            event.glide = glide != 0;
+        }
         if (!input || event.note < Stop || event.note > 127 ||
-            event.velocity < 1 || event.velocity > 127) {
+            event.velocity < 1 || event.velocity > 127 ||
+            event.tuning < -2400 || event.tuning > 2400) {
             setStatus("The clipboard contains invalid E16 pattern data", 5000);
             return;
         }
@@ -982,6 +1037,23 @@ void App::exportProject() {
     SDL_ShowSaveFileDialog(dialogCallback, this, window, filters, 1, nullptr);
 }
 
+void App::importPcmDialog() {
+    if (recorder.isRecording()) {
+        recorder.cancel();
+    }
+    {
+        std::lock_guard lock(dialogMutex);
+        if (dialogAction != DialogAction::None) {
+            return;
+        }
+        dialogAction = DialogAction::ImportPcm;
+    }
+    static const SDL_DialogFileFilter filters[]{
+        {"Audio files", "mp3;wav;flac;ogg"}};
+    SDL_ShowOpenFileDialog(dialogCallback, this, window, filters, 1, nullptr,
+                           false);
+}
+
 void App::openProject(const std::string &path) {
     Song loaded;
     std::string error;
@@ -1023,6 +1095,20 @@ void App::consumeDialogResult() {
         return;
     }
     std::string error;
+    if (action == DialogAction::ImportPcm) {
+        std::vector<std::uint8_t> imported;
+        if (importPcmFile(path, song.trimPcmSilence, imported, error)) {
+            song.pcmSample = std::move(imported);
+            selectedChannel = 5;
+            markChanged();
+            setStatus("Imported " + std::filesystem::path(path).filename().string() +
+                          " as 8 kHz PCM",
+                      6000);
+        } else {
+            setStatus("Could not import audio: " + error, 6000);
+        }
+        return;
+    }
     if (action == DialogAction::Save) {
         path = withExtension(path, ".e16music");
         if (song.title == "Untitled") {
@@ -1197,7 +1283,8 @@ void App::drawPcmEditor() {
     drawButton({244, 750, 104, 34}, "PLACE", false, Green);
     drawButton({356, 750, 104, 34}, "CLEAR", false, Red);
     drawButton({468, 750, 104, 34}, "AUTO TRIM", song.trimPcmSilence, Cyan);
-    drawText(590, 762,
+    drawButton({580, 750, 104, 34}, "IMPORT", false, Blue);
+    drawText(700, 762,
              song.pcmLoop ? "Looping sample; place STOP events to end it"
                           : "One-shot sample; empty steps do not cut it off",
              Muted);

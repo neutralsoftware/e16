@@ -445,6 +445,29 @@ std::size_t Compiler::directiveSize(const Directive &directive) const {
         return resolved;
     };
 
+    if (directive.name == ".locate") {
+        if (directive.arguments.size() != 1) {
+            fail(directive.line, ".locate expects exactly one address.");
+        }
+        int target = resolve(directive.arguments[0]);
+        if (target < 0 || target > 0xFFFFFF) {
+            fail(directive.line, ".locate address must fit in 24 bits.");
+        }
+        std::uint32_t current = addresses.at(&directive);
+        if (static_cast<std::uint32_t>(target) < current) {
+            fail(directive.line,
+                 ".locate address cannot be before the current address.");
+        }
+        return static_cast<std::uint32_t>(target) - current;
+    }
+
+    if (directive.name == ".addressOf") {
+        if (directive.arguments.size() != 1) {
+            fail(directive.line, ".addressOf expects exactly one label.");
+        }
+        return 3;
+    }
+
     if (directive.name == ".string") {
         std::size_t size = 0;
         for (const std::string &argument : directive.arguments) {
@@ -662,6 +685,21 @@ void Compiler::emitDirective(const Directive &directive,
 
     if (directive.name == ".const" || directive.name == ".constant" ||
         directive.name == ".include" || directive.name == ".symbols") {
+        return;
+    }
+
+    if (directive.name == ".locate") {
+        bytes.insert(bytes.end(), sizes.at(&directive), 0x00);
+        return;
+    }
+
+    if (directive.name == ".addressOf") {
+        if (directive.arguments.size() != 1) {
+            fail(directive.line, ".addressOf expects exactly one label.");
+        }
+        emit24(bytes, checkedAddress(resolve(directive.arguments[0]),
+                                     directive.line,
+                                     directive.arguments[0]));
         return;
     }
 

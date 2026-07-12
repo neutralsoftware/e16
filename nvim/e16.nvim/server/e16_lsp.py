@@ -124,6 +124,8 @@ DIRECTIVES = {
     ".byte",
     ".word",
     ".addr24",
+    ".addressOf",
+    ".locate",
     ".bin",
     ".macro",
     ".endmacro",
@@ -484,6 +486,13 @@ def parse_document(text, uri="", include_stack=None):
                 diagnostics.append(diag(line_number, symbols_match.start(1), max(len(symbols_match.group(1)), 1), ".symbols expects exactly one file path argument"))
             else:
                 symbol_files.append((line_number, symbols_match.start(1), arguments[0]))
+            continue
+        single_argument_directive_match = re.match(r"^\s*\.(locate|addressOf)\s*(.*)$", code)
+        if single_argument_directive_match:
+            arguments = split_arguments(single_argument_directive_match.group(2))
+            if len(arguments) != 1:
+                name = single_argument_directive_match.group(1)
+                diagnostics.append(diag(line_number, single_argument_directive_match.start(2), max(len(single_argument_directive_match.group(2)), 1), "." + name + " expects exactly one argument"))
             continue
         if stripped.startswith("."):
             directive = stripped.split(None, 1)[0]

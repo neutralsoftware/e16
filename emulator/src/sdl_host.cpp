@@ -191,6 +191,13 @@ void SdlHost::enableTwoPlayerControls() {
     showControls();
 }
 
+void SdlHost::showSaveRamNotice(const std::string &path) const {
+    std::string message =
+        "This game wrote to save RAM. Its data will be stored at:\n\n" + path;
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "Ember-16 Save Data",
+                             message.c_str(), window);
+}
+
 void SdlHost::present(const Flame &flame) {
     const auto &fb = flame.framebuffer();
     SDL_UpdateTexture(texture, nullptr, fb.data(), ScreenWidth * 4);

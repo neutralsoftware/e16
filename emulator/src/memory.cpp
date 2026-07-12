@@ -1,6 +1,8 @@
 #include "e16/memory.h"
 
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
 #include <stdexcept>
 
 namespace e16 {
@@ -13,6 +15,7 @@ bool inRange(std::uint32_t address, std::uint32_t start, std::uint32_t end) {
 bool isBackedMemory(std::uint32_t address) {
     return inRange(address, 0x000000, 0x03FFFF) ||
            inRange(address, AudioRamBase, AudioRamEnd) ||
+           inRange(address, SaveRamBase, SaveRamEnd) ||
            inRange(address, CartridgeRomBase, CartridgeRomEnd) ||
            inRange(address, BiosRomBase, BiosRomEnd);
 }
@@ -27,6 +30,40 @@ void Memory::reset() {
     inputPad0 = 0;
     inputPad1 = 0;
     inputPad1Read = false;
+    saveRamDirty = false;
+    saveRamWritten = false;
+    saveRamFirstWrite = false;
+}
+
+void Memory::configureSaveRam(const std::string &path) {
+    saveRamPath = path;
+    std::ifstream input(saveRamPath, std::ios::binary);
+    if (!input) {
+        return;
+    }
+    input.read(reinterpret_cast<char *>(bytes.data() + SaveRamBase),
+               static_cast<std::streamsize>(SaveRamEnd - SaveRamBase + 1));
+}
+
+void Memory::flushSaveRam() {
+    if (!saveRamDirty || saveRamPath.empty()) {
+        return;
+    }
+    std::filesystem::create_directories(
+        std::filesystem::path(saveRamPath).parent_path());
+    std::ofstream output(saveRamPath, std::ios::binary | std::ios::trunc);
+    if (!output) {
+        throw std::runtime_error("could not write save RAM to " + saveRamPath);
+    }
+    output.write(reinterpret_cast<const char *>(bytes.data() + SaveRamBase),
+                 static_cast<std::streamsize>(SaveRamEnd - SaveRamBase + 1));
+    saveRamDirty = false;
+}
+
+bool Memory::consumeSaveRamFirstWrite() {
+    bool written = saveRamFirstWrite;
+    saveRamFirstWrite = false;
+    return written;
 }
 
 void Memory::load(std::uint32_t address,
@@ -106,8 +143,16 @@ void Memory::write8(std::uint32_t address, std::uint8_t value) {
     if (inRange(address, MmioBase, MmioEnd)) {
         return;
     }
-    if (inRange(address, SaveRamBase, SaveRamEnd) ||
-        inRange(address, CartridgeRomBase, CartridgeRomEnd) ||
+    if (inRange(address, SaveRamBase, SaveRamEnd)) {
+        bytes[address] = value;
+        saveRamDirty = true;
+        if (!saveRamWritten) {
+            saveRamWritten = true;
+            saveRamFirstWrite = true;
+        }
+        return;
+    }
+    if (inRange(address, CartridgeRomBase, CartridgeRomEnd) ||
         inRange(address, BiosRomBase, BiosRomEnd) ||
         !isBackedMemory(address)) {
         return;

@@ -21,12 +21,40 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../assembler"
+                 "${CMAKE_BINARY_DIR}/assembler")
+
+set(BIOS_BINARY "${CMAKE_CURRENT_BINARY_DIR}/generated/bios.bin")
+set(BIOS_HEADER "${CMAKE_CURRENT_BINARY_DIR}/generated/bios_data.h")
+
+add_custom_command(
+        OUTPUT "${BIOS_BINARY}"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+        COMMAND $<TARGET_FILE:e16asm> --base 0xF00000
+                -o "${BIOS_BINARY}" "${CMAKE_CURRENT_SOURCE_DIR}/../bios/main.e16"
+        DEPENDS e16asm "${CMAKE_CURRENT_SOURCE_DIR}/../bios/main.e16"
+        VERBATIM
+)
+
+add_custom_command(
+        OUTPUT "${BIOS_HEADER}"
+        COMMAND "${CMAKE_COMMAND}"
+                "-DINPUT=${BIOS_BINARY}"
+                "-DOUTPUT=${BIOS_HEADER}"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_binary.cmake"
+        DEPENDS "${BIOS_BINARY}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_binary.cmake"
+        VERBATIM
+)
+
+add_custom_target(e16bios DEPENDS "${BIOS_HEADER}")
+
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
-        "${CMAKE_SOURCE_DIR}/src/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
 
 add_executable(e16emu ${SOURCES})
-target_include_directories(e16emu PUBLIC include)
+add_dependencies(e16emu e16bios)
+target_include_directories(e16emu PUBLIC include "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 find_package(SDL3 QUIET)
 if (SDL3_FOUND)

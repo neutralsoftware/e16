@@ -7,6 +7,7 @@ set(OLD_GLOB
   "/Users/maxvdec/Coding/Projects/E16/musicMaker/src/app.cpp"
   "/Users/maxvdec/Coding/Projects/E16/musicMaker/src/audio.cpp"
   "/Users/maxvdec/Coding/Projects/E16/musicMaker/src/main.cpp"
+  "/Users/maxvdec/Coding/Projects/E16/musicMaker/src/pcm_import.cpp"
   "/Users/maxvdec/Coding/Projects/E16/musicMaker/src/song.cpp"
   )
 if(NOT "${NEW_GLOB}" STREQUAL "${OLD_GLOB}")

@@ -45,6 +45,11 @@ double noteFrequency(int note) {
     return 440.0 * std::pow(2.0, (static_cast<double>(note) - 69.0) / 12.0);
 }
 
+double eventFrequency(int channel, const Step &event) {
+    double base = channel == 5 ? PcmSampleRate : noteFrequency(event.note);
+    return base * std::pow(2.0, static_cast<double>(event.tuning) / 1200.0);
+}
+
 std::array<int, MaxSteps> calculateStepFrames(const Song &song) {
     std::array<int, MaxSteps> frames{};
     double cumulative = 0.0;
@@ -93,7 +98,7 @@ bool saveSong(const Song &song, const std::string &path, std::string &error) {
         return false;
     }
 
-    output << "E16MUSIC 2\n";
+    output << "E16MUSIC 3\n";
     output << "title " << std::quoted(song.title) << "\n";
     output << "bpm " << song.bpm << "\n";
     output << "steps " << song.stepCount << "\n";
@@ -127,7 +132,9 @@ bool saveSong(const Song &song, const std::string &path, std::string &error) {
             const Step &event = song.pattern[channel][step];
             if (event.note != Rest) {
                 output << "event " << channel << ' ' << step << ' '
-                       << event.note << ' ' << event.velocity << "\n";
+                       << event.note << ' ' << event.velocity << ' '
+                       << event.tuning << ' ' << static_cast<int>(event.glide)
+                       << "\n";
             }
         }
     }
@@ -149,7 +156,8 @@ bool loadSong(Song &song, const std::string &path, std::string &error) {
     std::string signature;
     int version = 0;
     input >> signature >> version;
-    if (signature != "E16MUSIC" || (version != 1 && version != 2)) {
+    if (signature != "E16MUSIC" ||
+        (version != 1 && version != 2 && version != 3)) {
         error = "This is not an E16 Music Maker project";
         return false;
     }
@@ -192,10 +200,19 @@ bool loadSong(Song &song, const std::string &path, std::string &error) {
             int channel = 0;
             int step = 0;
             Step event;
-            input >> channel >> step >> event.note >> event.velocity;
+            std::string values;
+            std::getline(input, values);
+            std::istringstream eventInput(values);
+            eventInput >> channel >> step >> event.note >> event.velocity;
+            int glide = 0;
+            if (eventInput >> event.tuning) {
+                eventInput >> glide;
+                event.glide = glide != 0;
+            }
             if (channel < 0 || channel >= ChannelCount || step < 0 ||
                 step >= MaxSteps || event.note < Stop || event.note > 127 ||
-                event.velocity < 1 || event.velocity > 127) {
+                event.velocity < 1 || event.velocity > 127 ||
+                event.tuning < -2400 || event.tuning > 2400) {
                 error = "Project contains an invalid note event";
                 return false;
             }
@@ -435,6 +452,31 @@ bool exportE16(const Song &song, const std::string &path, std::string &error) {
     output << "    ret\n";
 
     std::array<int, MaxSteps> frameCounts = calculateStepFrames(song);
+    std::array<std::array<int, ChannelCount>, MaxSteps> glideStarts{};
+    std::array<std::array<int, ChannelCount>, MaxSteps> glideTargets{};
+    std::array<int, ChannelCount> previousFrequencies{};
+    bool hasGlides = false;
+    for (int step = 0; step < song.stepCount; step++) {
+        for (int channel = 0; channel < ChannelCount; channel++) {
+            const Step &event = song.pattern[channel][step];
+            if (event.note >= 0) {
+                int target = std::clamp(
+                    static_cast<int>(std::lround(eventFrequency(channel, event))),
+                    1, 65535);
+                if (event.glide && previousFrequencies[channel] > 0 &&
+                    previousFrequencies[channel] != target &&
+                    frameCounts[step] > 1) {
+                    glideStarts[step][channel] = previousFrequencies[channel];
+                    glideTargets[step][channel] = target;
+                    hasGlides = true;
+                }
+                previousFrequencies[channel] = target;
+            } else if (event.note == Stop ||
+                       (event.note == Rest && channel != 5)) {
+                previousFrequencies[channel] = 0;
+            }
+        }
+    }
 
     output << "\nmusic_update:\n";
     output << "    push r0\n";
@@ -445,6 +487,10 @@ bool exportE16(const Song &song, const std::string &path, std::string &error) {
     output << "    loadw r0, @MUSIC_WAIT_STATE\n";
     output << "    cmp r0, 0\n";
     output << "    beq music_update_advance\n";
+    if (hasGlides) {
+        output << "    call music_glide_update\n";
+        output << "    loadw r0, @MUSIC_WAIT_STATE\n";
+    }
     output << "    dec r0\n";
     output << "    storew @MUSIC_WAIT_STATE, r0\n";
     output << "    bra music_update_done\n";
@@ -462,13 +508,13 @@ bool exportE16(const Song &song, const std::string &path, std::string &error) {
         for (int channel = 0; channel < ChannelCount; channel++) {
             const Step &event = song.pattern[channel][step];
             if (event.note >= 0) {
-                int frequency =
-                    static_cast<int>(std::lround(noteFrequency(event.note)));
-                frequency = std::clamp(frequency, 1, 65535);
-                output << "    mov r0, "
-                       << (channel == 5 ? "MUSIC_PCM_RATE"
-                                        : std::to_string(frequency))
-                       << "\n";
+                int frequency = std::clamp(
+                    static_cast<int>(std::lround(eventFrequency(channel, event))),
+                    1, 65535);
+                int initial = glideStarts[step][channel] > 0
+                                  ? glideStarts[step][channel]
+                                  : frequency;
+                output << "    mov r0, " << initial << "\n";
                 output << "    storew @(MUSIC_APU_CH" << channel
                        << "_BASE + MUSIC_CH_FREQ), r0\n";
                 output << "    mov r0, "
@@ -509,6 +555,62 @@ bool exportE16(const Song &song, const std::string &path, std::string &error) {
     output << "    pop r1\n";
     output << "    pop r0\n";
     output << "    ret\n";
+    if (hasGlides) {
+        output << "\nmusic_glide_update:\n";
+        output << "    loadw r0, @MUSIC_STEP_STATE\n";
+        for (int step = 0; step < song.stepCount; step++) {
+            bool stepGlides = std::any_of(
+                glideStarts[step].begin(), glideStarts[step].end(),
+                [](int value) { return value > 0; });
+            if (!stepGlides) {
+                continue;
+            }
+            int next = step + 1 == song.stepCount ? 0 : step + 1;
+            output << "    cmp r0, " << next << "\n";
+            output << "    beq music_glide_step_" << step << "\n";
+            if (step + 1 == song.stepCount) {
+                output << "    cmp r0, " << song.stepCount << "\n";
+                output << "    beq music_glide_step_" << step << "\n";
+            }
+        }
+        output << "    ret\n";
+        for (int step = 0; step < song.stepCount; step++) {
+            bool stepGlides = std::any_of(
+                glideStarts[step].begin(), glideStarts[step].end(),
+                [](int value) { return value > 0; });
+            if (!stepGlides) {
+                continue;
+            }
+            output << "music_glide_step_" << step << ":\n";
+            output << "    loadw r0, @MUSIC_WAIT_STATE\n";
+            for (int remaining = 1; remaining < frameCounts[step]; remaining++) {
+                output << "    cmp r0, " << remaining << "\n";
+                output << "    beq music_glide_step_" << step << "_frame_"
+                       << remaining << "\n";
+            }
+            output << "    ret\n";
+            for (int remaining = 1; remaining < frameCounts[step]; remaining++) {
+                output << "music_glide_step_" << step << "_frame_" << remaining
+                       << ":\n";
+                double progress =
+                    static_cast<double>(frameCounts[step] - remaining) /
+                    frameCounts[step];
+                for (int channel = 0; channel < ChannelCount; channel++) {
+                    int start = glideStarts[step][channel];
+                    if (start == 0) {
+                        continue;
+                    }
+                    int target = glideTargets[step][channel];
+                    int frequency = static_cast<int>(
+                        std::lround(start + (target - start) * progress));
+                    output << "    mov r1, " << frequency << "\n";
+                    output << "    storew @(MUSIC_APU_CH" << channel
+                           << "_BASE + MUSIC_CH_FREQ), r1\n";
+                }
+                output << "    ret\n";
+            }
+        }
+    }
     output << "\n";
     emitBytes(output, "music_wavetable_data", song.wavetable.data(),
               song.wavetable.size());

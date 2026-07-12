@@ -1,25 +1,31 @@
 [
 {
   "directory": "/Users/maxvdec/Coding/Projects/E16/musicMaker/build",
-  "command": "/opt/homebrew/opt/llvm/bin/clang++  -I/Users/maxvdec/Coding/Projects/E16/musicMaker/include -I/opt/homebrew/include -std=c++20 -arch arm64 -Wall -Wextra -Wpedantic -o CMakeFiles/e16musicmaker.dir/src/app.cpp.o -c /Users/maxvdec/Coding/Projects/E16/musicMaker/src/app.cpp",
+  "command": "/opt/homebrew/opt/llvm/bin/clang++  -I/Users/maxvdec/Coding/Projects/E16/musicMaker/include -I/opt/homebrew/include -isystem /opt/homebrew/Cellar/libsndfile/1.2.2_1/include -isystem /opt/homebrew/Cellar/flac/1.5.0/include -isystem /opt/homebrew/Cellar/libvorbis/1.3.7/include -isystem /opt/homebrew/Cellar/libogg/1.3.6/include -isystem /opt/homebrew/Cellar/opus/1.6.1/include/opus -isystem /opt/homebrew/Cellar/mpg123/1.33.5/include -std=c++20 -arch arm64 -Wall -Wextra -Wpedantic -o CMakeFiles/e16musicmaker.dir/src/app.cpp.o -c /Users/maxvdec/Coding/Projects/E16/musicMaker/src/app.cpp",
   "file": "/Users/maxvdec/Coding/Projects/E16/musicMaker/src/app.cpp",
   "output": "CMakeFiles/e16musicmaker.dir/src/app.cpp.o"
 },
 {
   "directory": "/Users/maxvdec/Coding/Projects/E16/musicMaker/build",
-  "command": "/opt/homebrew/opt/llvm/bin/clang++  -I/Users/maxvdec/Coding/Projects/E16/musicMaker/include -I/opt/homebrew/include -std=c++20 -arch arm64 -Wall -Wextra -Wpedantic -o CMakeFiles/e16musicmaker.dir/src/audio.cpp.o -c /Users/maxvdec/Coding/Projects/E16/musicMaker/src/audio.cpp",
+  "command": "/opt/homebrew/opt/llvm/bin/clang++  -I/Users/maxvdec/Coding/Projects/E16/musicMaker/include -I/opt/homebrew/include -isystem /opt/homebrew/Cellar/libsndfile/1.2.2_1/include -isystem /opt/homebrew/Cellar/flac/1.5.0/include -isystem /opt/homebrew/Cellar/libvorbis/1.3.7/include -isystem /opt/homebrew/Cellar/libogg/1.3.6/include -isystem /opt/homebrew/Cellar/opus/1.6.1/include/opus -isystem /opt/homebrew/Cellar/mpg123/1.33.5/include -std=c++20 -arch arm64 -Wall -Wextra -Wpedantic -o CMakeFiles/e16musicmaker.dir/src/audio.cpp.o -c /Users/maxvdec/Coding/Projects/E16/musicMaker/src/audio.cpp",
   "file": "/Users/maxvdec/Coding/Projects/E16/musicMaker/src/audio.cpp",
   "output": "CMakeFiles/e16musicmaker.dir/src/audio.cpp.o"
 },
 {
   "directory": "/Users/maxvdec/Coding/Projects/E16/musicMaker/build",
-  "command": "/opt/homebrew/opt/llvm/bin/clang++  -I/Users/maxvdec/Coding/Projects/E16/musicMaker/include -I/opt/homebrew/include -std=c++20 -arch arm64 -Wall -Wextra -Wpedantic -o CMakeFiles/e16musicmaker.dir/src/main.cpp.o -c /Users/maxvdec/Coding/Projects/E16/musicMaker/src/main.cpp",
+  "command": "/opt/homebrew/opt/llvm/bin/clang++  -I/Users/maxvdec/Coding/Projects/E16/musicMaker/include -I/opt/homebrew/include -isystem /opt/homebrew/Cellar/libsndfile/1.2.2_1/include -isystem /opt/homebrew/Cellar/flac/1.5.0/include -isystem /opt/homebrew/Cellar/libvorbis/1.3.7/include -isystem /opt/homebrew/Cellar/libogg/1.3.6/include -isystem /opt/homebrew/Cellar/opus/1.6.1/include/opus -isystem /opt/homebrew/Cellar/mpg123/1.33.5/include -std=c++20 -arch arm64 -Wall -Wextra -Wpedantic -o CMakeFiles/e16musicmaker.dir/src/main.cpp.o -c /Users/maxvdec/Coding/Projects/E16/musicMaker/src/main.cpp",
   "file": "/Users/maxvdec/Coding/Projects/E16/musicMaker/src/main.cpp",
   "output": "CMakeFiles/e16musicmaker.dir/src/main.cpp.o"
 },
 {
   "directory": "/Users/maxvdec/Coding/Projects/E16/musicMaker/build",
-  "command": "/opt/homebrew/opt/llvm/bin/clang++  -I/Users/maxvdec/Coding/Projects/E16/musicMaker/include -I/opt/homebrew/include -std=c++20 -arch arm64 -Wall -Wextra -Wpedantic -o CMakeFiles/e16musicmaker.dir/src/song.cpp.o -c /Users/maxvdec/Coding/Projects/E16/musicMaker/src/song.cpp",
+  "command": "/opt/homebrew/opt/llvm/bin/clang++  -I/Users/maxvdec/Coding/Projects/E16/musicMaker/include -I/opt/homebrew/include -isystem /opt/homebrew/Cellar/libsndfile/1.2.2_1/include -isystem /opt/homebrew/Cellar/flac/1.5.0/include -isystem /opt/homebrew/Cellar/libvorbis/1.3.7/include -isystem /opt/homebrew/Cellar/libogg/1.3.6/include -isystem /opt/homebrew/Cellar/opus/1.6.1/include/opus -isystem /opt/homebrew/Cellar/mpg123/1.33.5/include -std=c++20 -arch arm64 -Wall -Wextra -Wpedantic -o CMakeFiles/e16musicmaker.dir/src/pcm_import.cpp.o -c /Users/maxvdec/Coding/Projects/E16/musicMaker/src/pcm_import.cpp",
+  "file": "/Users/maxvdec/Coding/Projects/E16/musicMaker/src/pcm_import.cpp",
+  "output": "CMakeFiles/e16musicmaker.dir/src/pcm_import.cpp.o"
+},
+{
+  "directory": "/Users/maxvdec/Coding/Projects/E16/musicMaker/build",
+  "command": "/opt/homebrew/opt/llvm/bin/clang++  -I/Users/maxvdec/Coding/Projects/E16/musicMaker/include -I/opt/homebrew/include -isystem /opt/homebrew/Cellar/libsndfile/1.2.2_1/include -isystem /opt/homebrew/Cellar/flac/1.5.0/include -isystem /opt/homebrew/Cellar/libvorbis/1.3.7/include -isystem /opt/homebrew/Cellar/libogg/1.3.6/include -isystem /opt/homebrew/Cellar/opus/1.6.1/include/opus -isystem /opt/homebrew/Cellar/mpg123/1.33.5/include -std=c++20 -arch arm64 -Wall -Wextra -Wpedantic -o CMakeFiles/e16musicmaker.dir/src/song.cpp.o -c /Users/maxvdec/Coding/Projects/E16/musicMaker/src/song.cpp",
   "file": "/Users/maxvdec/Coding/Projects/E16/musicMaker/src/song.cpp",
   "output": "CMakeFiles/e16musicmaker.dir/src/song.cpp.o"
 }

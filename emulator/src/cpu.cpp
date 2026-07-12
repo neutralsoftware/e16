@@ -182,7 +182,7 @@ StopReason Cpu::step() {
         return StopReason::Halted;
     }
     if (opcode == 0x86) {
-        reset(DefaultLoadAddress);
+        reset(BiosRomBase);
         return StopReason::None;
     }
     if (opcode == 0x87) {

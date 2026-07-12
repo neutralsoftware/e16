@@ -219,8 +219,17 @@ E16MusicMaker_IS_TOP_LEVEL:STATIC=ON
 //Value Computed by CMake
 E16MusicMaker_SOURCE_DIR:STATIC=/Users/maxvdec/Coding/Projects/E16/musicMaker
 
+//Arguments to supply to pkg-config
+PKG_CONFIG_ARGN:STRING=
+
+//pkg-config executable
+PKG_CONFIG_EXECUTABLE:FILEPATH=/opt/homebrew/bin/pkg-config
+
 //The directory containing a CMake configuration file for SDL3.
 SDL3_DIR:PATH=/opt/homebrew/lib/cmake/SDL3
+
+//Path to a library.
+pkgcfg_lib_SNDFILE_sndfile:FILEPATH=/opt/homebrew/Cellar/libsndfile/1.2.2_1/lib/libsndfile.dylib
 
 
 ########################
@@ -362,4 +371,50 @@ CMAKE_TAPI-ADVANCED:INTERNAL=1
 CMAKE_UNAME:INTERNAL=/usr/bin/uname
 //ADVANCED property for variable: CMAKE_VERBOSE_MAKEFILE
 CMAKE_VERBOSE_MAKEFILE-ADVANCED:INTERNAL=1
+//Details about finding PkgConfig
+FIND_PACKAGE_MESSAGE_DETAILS_PkgConfig:INTERNAL=[/opt/homebrew/bin/pkg-config][v2.5.1()]
+//ADVANCED property for variable: PKG_CONFIG_ARGN
+PKG_CONFIG_ARGN-ADVANCED:INTERNAL=1
+//ADVANCED property for variable: PKG_CONFIG_EXECUTABLE
+PKG_CONFIG_EXECUTABLE-ADVANCED:INTERNAL=1
+SNDFILE_CFLAGS:INTERNAL=-I/opt/homebrew/Cellar/libsndfile/1.2.2_1/include;-I/opt/homebrew/Cellar/flac/1.5.0/include;-I/opt/homebrew/Cellar/libvorbis/1.3.7/include;-I/opt/homebrew/Cellar/libogg/1.3.6/include;-I/opt/homebrew/Cellar/opus/1.6.1/include/opus;-I/opt/homebrew/Cellar/mpg123/1.33.5/include
+SNDFILE_CFLAGS_I:INTERNAL=
+SNDFILE_CFLAGS_OTHER:INTERNAL=
+SNDFILE_FOUND:INTERNAL=1
+SNDFILE_INCLUDEDIR:INTERNAL=/opt/homebrew/Cellar/libsndfile/1.2.2_1/include
+SNDFILE_INCLUDE_DIRS:INTERNAL=/opt/homebrew/Cellar/libsndfile/1.2.2_1/include;/opt/homebrew/Cellar/flac/1.5.0/include;/opt/homebrew/Cellar/libvorbis/1.3.7/include;/opt/homebrew/Cellar/libogg/1.3.6/include;/opt/homebrew/Cellar/opus/1.6.1/include/opus;/opt/homebrew/Cellar/mpg123/1.33.5/include
+SNDFILE_LDFLAGS:INTERNAL=-L/opt/homebrew/Cellar/libsndfile/1.2.2_1/lib;-lsndfile
+SNDFILE_LDFLAGS_OTHER:INTERNAL=
+SNDFILE_LIBDIR:INTERNAL=/opt/homebrew/Cellar/libsndfile/1.2.2_1/lib
+SNDFILE_LIBRARIES:INTERNAL=sndfile
+SNDFILE_LIBRARY_DIRS:INTERNAL=/opt/homebrew/Cellar/libsndfile/1.2.2_1/lib
+SNDFILE_LIBS:INTERNAL=
+SNDFILE_LIBS_L:INTERNAL=
+SNDFILE_LIBS_OTHER:INTERNAL=
+SNDFILE_LIBS_PATHS:INTERNAL=
+SNDFILE_MODULE_NAME:INTERNAL=sndfile
+SNDFILE_PREFIX:INTERNAL=/opt/homebrew/Cellar/libsndfile/1.2.2_1
+SNDFILE_STATIC_CFLAGS:INTERNAL=-I/opt/homebrew/Cellar/libsndfile/1.2.2_1/include;-I/opt/homebrew/Cellar/flac/1.5.0/include;-I/opt/homebrew/Cellar/libvorbis/1.3.7/include;-I/opt/homebrew/Cellar/libogg/1.3.6/include;-I/opt/homebrew/Cellar/opus/1.6.1/include/opus;-I/opt/homebrew/Cellar/mpg123/1.33.5/include
+SNDFILE_STATIC_CFLAGS_I:INTERNAL=
+SNDFILE_STATIC_CFLAGS_OTHER:INTERNAL=
+SNDFILE_STATIC_INCLUDE_DIRS:INTERNAL=/opt/homebrew/Cellar/libsndfile/1.2.2_1/include;/opt/homebrew/Cellar/flac/1.5.0/include;/opt/homebrew/Cellar/libvorbis/1.3.7/include;/opt/homebrew/Cellar/libogg/1.3.6/include;/opt/homebrew/Cellar/opus/1.6.1/include/opus;/opt/homebrew/Cellar/mpg123/1.33.5/include
+SNDFILE_STATIC_LDFLAGS:INTERNAL=-L/opt/homebrew/Cellar/libsndfile/1.2.2_1/lib;-lsndfile;-lmp3lame;-L/opt/homebrew/Cellar/flac/1.5.0/lib;-lFLAC;-lm;-L/opt/homebrew/Cellar/libvorbis/1.3.7/lib;-lvorbisenc;-lvorbis;-lm;-L/opt/homebrew/Cellar/libogg/1.3.6/lib;-logg;-L/opt/homebrew/Cellar/opus/1.6.1/lib;-lopus;-L/opt/homebrew/Cellar/mpg123/1.33.5/lib;-lmpg123
+SNDFILE_STATIC_LDFLAGS_OTHER:INTERNAL=
+SNDFILE_STATIC_LIBDIR:INTERNAL=
+SNDFILE_STATIC_LIBRARIES:INTERNAL=sndfile;mp3lame;FLAC;m;vorbisenc;vorbis;m;ogg;opus;mpg123
+SNDFILE_STATIC_LIBRARY_DIRS:INTERNAL=/opt/homebrew/Cellar/libsndfile/1.2.2_1/lib;/opt/homebrew/Cellar/flac/1.5.0/lib;/opt/homebrew/Cellar/libvorbis/1.3.7/lib;/opt/homebrew/Cellar/libogg/1.3.6/lib;/opt/homebrew/Cellar/opus/1.6.1/lib;/opt/homebrew/Cellar/mpg123/1.33.5/lib
+SNDFILE_STATIC_LIBS:INTERNAL=
+SNDFILE_STATIC_LIBS_L:INTERNAL=
+SNDFILE_STATIC_LIBS_OTHER:INTERNAL=
+SNDFILE_STATIC_LIBS_PATHS:INTERNAL=
+SNDFILE_VERSION:INTERNAL=1.2.2
+SNDFILE_sndfile_INCLUDEDIR:INTERNAL=
+SNDFILE_sndfile_LIBDIR:INTERNAL=
+SNDFILE_sndfile_PREFIX:INTERNAL=
+SNDFILE_sndfile_VERSION:INTERNAL=
+__pkg_config_arguments_SNDFILE:INTERNAL=REQUIRED;IMPORTED_TARGET;sndfile
+__pkg_config_checked_SNDFILE:INTERNAL=1
+//ADVANCED property for variable: pkgcfg_lib_SNDFILE_sndfile
+pkgcfg_lib_SNDFILE_sndfile-ADVANCED:INTERNAL=1
+prefix_result:INTERNAL=/opt/homebrew/Cellar/libsndfile/1.2.2_1/lib
 

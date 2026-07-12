@@ -1,0 +1,7 @@
+set shell := ["zsh", "-cu"]
+
+bios:
+    cmake -S . -B build
+    cmake --build build --target e16emu
+    build/e16asm --base 0x200000 -o build/bios-test.bin bios-test.e16
+    build/e16emu -s build/bios-test.bin

@@ -45,12 +45,12 @@ void AudioEngine::setSong(const Song &newSong) {
     }
 }
 
-void AudioEngine::play() {
+void AudioEngine::play(int startStep) {
     std::lock_guard lock(mutex);
-    currentStep = 0;
+    currentStep = std::clamp(startStep, 0, song.stepCount - 1);
     samplesIntoStep = 0.0;
     resetVoices();
-    applyStep(0);
+    applyStep(currentStep);
     playing = true;
 }
 
@@ -62,11 +62,11 @@ void AudioEngine::stop() {
     resetVoices();
 }
 
-void AudioEngine::toggle() {
+void AudioEngine::toggle(int startStep) {
     if (playing) {
         stop();
     } else {
-        play();
+        play(startStep);
     }
 }
 
@@ -86,6 +86,10 @@ void AudioEngine::preview(int channel, int note) {
         std::clamp(previewSamples, SampleRate / 10, SampleRate * 2);
     voices[previewChannel].note = previewNote;
     voices[previewChannel].velocity = 112;
+    Step previewEvent{previewNote, 112};
+    voices[previewChannel].frequency =
+        eventFrequency(previewChannel, previewEvent);
+    voices[previewChannel].gliding = false;
     voices[previewChannel].phase = 0.0;
     voices[previewChannel].lfsr = 0x4000;
     voices[previewChannel].samplePosition = 0.0;
@@ -117,6 +121,15 @@ void AudioEngine::render(float *output, int frames) {
                 samplesIntoStep -= stepSamples(currentStep);
                 currentStep = (currentStep + 1) % song.stepCount;
                 applyStep(currentStep);
+            }
+            double progress =
+                std::clamp(samplesIntoStep / stepSamples(currentStep), 0.0, 1.0);
+            for (Voice &voice : voices) {
+                if (voice.gliding) {
+                    voice.frequency = voice.glideStart +
+                                      (voice.glideTarget - voice.glideStart) *
+                                          progress;
+                }
             }
         }
 
@@ -167,14 +180,23 @@ void AudioEngine::applyStep(int step) {
         const Step &event = song.pattern[channel][step];
         Voice &voice = voices[channel];
         if (event.note >= 0) {
+            double target = eventFrequency(channel, event);
+            bool canGlide = event.glide && voice.note >= 0;
+            voice.glideStart = canGlide ? voice.frequency : target;
+            voice.glideTarget = target;
+            voice.frequency = voice.glideStart;
+            voice.gliding = canGlide;
             voice.note = event.note;
             voice.velocity = event.velocity;
-            voice.phase = 0.0;
-            voice.lfsr = 0x4000;
+            if (!canGlide) {
+                voice.phase = 0.0;
+                voice.lfsr = 0x4000;
+            }
             voice.samplePosition = 0.0;
         } else if (event.note == Stop || (event.note == Rest && channel != 5)) {
             voice.note = Rest;
             voice.velocity = 0;
+            voice.gliding = false;
         }
     }
 }
@@ -185,7 +207,7 @@ double AudioEngine::stepSamples(int step) const {
 }
 
 float AudioEngine::voiceSample(int channel, Voice &voice) {
-    double frequency = noteFrequency(voice.note);
+    double frequency = voice.frequency;
     if (channel == 4) {
         voice.phase += frequency * WavetableSize / SampleRate;
         voice.phase =
@@ -210,7 +232,7 @@ float AudioEngine::voiceSample(int channel, Voice &voice) {
         }
         float sample =
             (static_cast<float>(song.pcmSample[index]) - 128.0f) / 128.0f;
-        voice.samplePosition += static_cast<double>(PcmSampleRate) / SampleRate;
+        voice.samplePosition += voice.frequency / SampleRate;
         return sample;
     }
     voice.phase += frequency / SampleRate;

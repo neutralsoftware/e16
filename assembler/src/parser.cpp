@@ -862,7 +862,10 @@ void Parser::verifyIntegrity() {
             if (directive->name == ".const" || directive->name == ".constant" ||
                 directive->name == ".string" || directive->name == ".data" ||
                 directive->name == ".byte" || directive->name == ".word" ||
-                directive->name == ".addr24" || directive->name == ".include" ||
+                directive->name == ".addr24" ||
+                directive->name == ".addressOf" ||
+                directive->name == ".locate" ||
+                directive->name == ".include" ||
                 directive->name == ".symbols" || directive->name == ".bin") {
                 continue;
             }

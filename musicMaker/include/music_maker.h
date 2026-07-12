@@ -27,6 +27,8 @@ constexpr int WavetableSize = 32;
 struct Step {
     int note = Rest;
     int velocity = 112;
+    int tuning = 0;
+    bool glide = false;
 };
 
 struct ChannelSettings {
@@ -55,11 +57,14 @@ struct Song {
 
 std::string noteName(int note);
 double noteFrequency(int note);
+double eventFrequency(int channel, const Step &event);
 std::array<int, MaxSteps> calculateStepFrames(const Song &song);
 std::string exportSymbolPrefix(const std::string &path);
 bool saveSong(const Song &song, const std::string &path, std::string &error);
 bool loadSong(Song &song, const std::string &path, std::string &error);
 bool exportE16(const Song &song, const std::string &path, std::string &error);
+bool importPcmFile(const std::string &path, bool trimLeadingSilence,
+                   std::vector<std::uint8_t> &sample, std::string &error);
 
 class AudioEngine {
   public:
@@ -69,9 +74,9 @@ class AudioEngine {
     bool open(std::string &error);
     void close();
     void setSong(const Song &song);
-    void play();
+    void play(int startStep = 0);
     void stop();
-    void toggle();
+    void toggle(int startStep = 0);
     bool isPlaying() const;
     int playhead() const;
     void preview(int channel, int note);
@@ -81,6 +86,10 @@ class AudioEngine {
         double phase = 0.0;
         int note = Rest;
         int velocity = 0;
+        double frequency = 440.0;
+        double glideStart = 440.0;
+        double glideTarget = 440.0;
+        bool gliding = false;
         std::uint16_t lfsr = 0x4000;
         double samplePosition = 0.0;
     };
@@ -134,7 +143,7 @@ class App {
     int run();
 
   private:
-    enum class DialogAction { None, Open, Save, Export };
+    enum class DialogAction { None, Open, Save, Export, ImportPcm };
 
     struct Rect {
         float x;
@@ -191,6 +200,7 @@ class App {
     void openDialog();
     void saveProject(bool choosePath);
     void exportProject();
+    void importPcmDialog();
     void openProject(const std::string &path);
     void consumeDialogResult();
     void changeMaxPages(int direction);

@@ -7,6 +7,7 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace e16 {
@@ -16,6 +17,9 @@ class Memory {
     explicit Memory(Flame &flame, Apu &apu);
 
     void reset();
+    void configureSaveRam(const std::string &path);
+    void flushSaveRam();
+    bool consumeSaveRamFirstWrite();
     void load(std::uint32_t address, const std::vector<std::uint8_t> &bytes);
     std::uint8_t read8(std::uint32_t address) const;
     std::uint16_t read16(std::uint32_t address) const;
@@ -35,6 +39,10 @@ class Memory {
     std::vector<std::uint8_t> bytes;
     std::array<std::uint8_t, 0x100> dma{};
     mutable bool inputPad1Read = false;
+    std::string saveRamPath;
+    bool saveRamDirty = false;
+    bool saveRamWritten = false;
+    bool saveRamFirstWrite = false;
 
     std::uint8_t readDma(std::uint32_t address) const;
     void writeDma(std::uint32_t address, std::uint8_t value);

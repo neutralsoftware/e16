@@ -11,6 +11,7 @@ set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "/Users/maxvdec/Coding/Projects/E16/musicMaker/src/app.cpp" "CMakeFiles/e16musicmaker.dir/src/app.cpp.o" "gcc" "CMakeFiles/e16musicmaker.dir/src/app.cpp.o.d"
   "/Users/maxvdec/Coding/Projects/E16/musicMaker/src/audio.cpp" "CMakeFiles/e16musicmaker.dir/src/audio.cpp.o" "gcc" "CMakeFiles/e16musicmaker.dir/src/audio.cpp.o.d"
   "/Users/maxvdec/Coding/Projects/E16/musicMaker/src/main.cpp" "CMakeFiles/e16musicmaker.dir/src/main.cpp.o" "gcc" "CMakeFiles/e16musicmaker.dir/src/main.cpp.o.d"
+  "/Users/maxvdec/Coding/Projects/E16/musicMaker/src/pcm_import.cpp" "CMakeFiles/e16musicmaker.dir/src/pcm_import.cpp.o" "gcc" "CMakeFiles/e16musicmaker.dir/src/pcm_import.cpp.o.d"
   "/Users/maxvdec/Coding/Projects/E16/musicMaker/src/song.cpp" "CMakeFiles/e16musicmaker.dir/src/song.cpp.o" "gcc" "CMakeFiles/e16musicmaker.dir/src/song.cpp.o.d"
   )
 

@@ -1,13 +1,45 @@
 #include "e16/emulator.h"
 
 #include "e16/disassembler.h"
+#include "bios_data.h"
 
 #include <chrono>
+#include <cctype>
+#include <cstdlib>
+#include <filesystem>
+#include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <thread>
 #include <utility>
 
 namespace e16 {
+
+namespace {
+std::string savePathFor(const std::string &programPath) {
+    std::filesystem::path absolute =
+        std::filesystem::absolute(programPath).lexically_normal();
+    std::string identity = absolute.string();
+    std::uint64_t hash = 14695981039346656037ull;
+    for (unsigned char byte : identity) {
+        hash ^= byte;
+        hash *= 1099511628211ull;
+    }
+    std::string name = absolute.stem().string();
+    for (char &character : name) {
+        if (!std::isalnum(static_cast<unsigned char>(character)) &&
+            character != '-' && character != '_') {
+            character = '_';
+        }
+    }
+    std::ostringstream filename;
+    filename << name << '-' << std::hex << std::setw(16) << std::setfill('0')
+             << hash << ".sav";
+    const char *home = std::getenv("HOME");
+    std::filesystem::path root = home ? home : ".";
+    return (root / ".ember16" / "saves" / filename.str()).string();
+}
+}
 
 Emulator::Emulator(EmulatorOptions options)
     : options(std::move(options)), flame(), apu(), memory(flame, apu),
@@ -16,11 +48,16 @@ Emulator::Emulator(EmulatorOptions options)
 }
 
 int Emulator::run() {
+    static_assert(BiosData.size() <= BiosRomEnd - BiosRomBase + 1);
     memory.reset();
     flame.reset();
     apu.reset();
     memory.load(options.loadAddress, readFile(options.programPath));
-    cpu.reset(options.loadAddress);
+    memory.load(BiosRomBase,
+                std::vector<std::uint8_t>(BiosData.begin(), BiosData.end()));
+    std::string savePath = savePathFor(options.programPath);
+    memory.configureSaveRam(savePath);
+    cpu.reset(BiosRomBase);
 
     if (!sdl.open(options.scale, apu)) {
         std::cerr << "SDL: " << sdl.error() << "\n";
@@ -42,6 +79,10 @@ int Emulator::run() {
         }
 
         runFrame();
+        if (memory.consumeSaveRamFirstWrite()) {
+            sdl.showSaveRamNotice(savePath);
+        }
+        memory.flushSaveRam();
         if (memory.consumeInputPad1Read()) {
             sdl.enableTwoPlayerControls();
         }
@@ -66,6 +107,7 @@ int Emulator::run() {
         }
     }
 
+    memory.flushSaveRam();
     return 0;
 }
 

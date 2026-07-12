@@ -1,0 +1,384 @@
+; Ember 16 BIOS default interrupt handlers
+;
+; Reference usage:
+; 0 - Software Interrupt
+; 1 - VBlank start
+; 2 - Timer
+; 3 - Keyboard / input
+; 4 - Audio frame / buffer event
+; 5 - DMA complete
+; 6 - Cartridge load complete
+; 7 - VBlank end
+; 8 - HBlank
+; 9 - PCM playback complete
+; 10 - Invalid Hardware Access
+; 11 - Breakpoint
+; 12-15 Reserved
+
+; Interrupt controller registers
+.const INT_ENABLE_LO, 0xFF0100
+.const INT_ENABLE_HI, 0xFF0101
+.const INT_PENDING_LO, 0xFF0102
+.const INT_PENDING_HI, 0xFF0103
+.const INT_PRIORITY, 0xFF0104
+.const INT_ACK, 0xFF0105
+.const INT_VECTOR_BASE0, 0xFF0106
+.const INT_VECTOR_BASE1, 0xFF0107
+.const INT_VECTOR_BASE2, 0xFF0108
+
+; VPU registers
+.const VPU_STATUS, 0xFF1002
+.const VPU_FRAME, 0xFF1004
+.const VPU_IRQ_ENABLE, 0xFF100A
+.const VPU_IRQ_STATUS, 0xFF100C
+
+; APU registers
+.const APU_STATUS, 0xFF2002
+.const APU_FRAME_COUNTER, 0xFF2008
+.const APU_IRQ_ENABLE, 0xFF200A
+.const APU_IRQ_STATUS, 0xFF200C
+
+; Input registers
+.const INPUT_PAD0, 0xFF3000
+.const INPUT_PAD1, 0xFF3002
+
+; DMA registers
+.const DMA_CONTROL, 0xFF0308
+.const DMA_STATUS, 0xFF0309
+
+; Cartrdige controller registers
+.const CART_STATUS, 0xFF4000
+.const CART_IRQ_STATUS, 0xFF4004
+
+; Debug registers
+.const DBG_OUT_CHAR, 0xFF5000
+.const DBG_BREAK, 0xFF5001
+
+; BIOS variables in work RAM 
+.const frame_ready, 0x000040
+.const frame_counter, 0x000042
+.const timer_ticks, 0x000044
+.const pad0_state, 0x000046
+.const pad1_state, 0x000048
+.const input_ready, 0x00004A
+.const audio_ticks, 0x00004C
+.const audio_event, 0x00004E
+.const dma_done, 0x000050
+.const dma_status, 0x000052
+.const cart_ready, 0x000054
+.const cart_status, 0x000056
+.const last_interrupt, 0x000058
+.const invalid_irq_count, 0x00005A
+
+; Interrupt IDS
+.const IRQ_SYSTEM, 0
+.const IRQ_VBLANK_START, 1
+.const IRQ_TIMER, 2
+.const IRQ_INPUT, 3
+.const IRQ_AUDIO, 4
+.const IRQ_DMA_COMPLETE, 5
+.const IRQ_CART_COMPLETE, 6
+.const IRQ_VBLANK_END, 7
+.const IRQ_HBLANK, 8
+.const IRQ_PCM_COMPLETE, 9
+.const IRQ_INVALID_ACCESS, 10
+.const IRQ_DEBUG, 11
+
+; Generic interrupt handler
+bios_default_interrupt:
+    pusha
+
+    load r0, @invalid_irq_count
+    inc r0
+    store @invalid_irq_count, r0
+
+    mov r0, 0x00FF
+    store @last_interrupt, r0
+
+    mov r0, 0x00FF
+    storeb @INT_ACK, r0
+    
+    popa
+    iret
+
+; System interrupt handler
+bios_system_default:
+    pusha
+
+    mov r0, IRQ_SYSTEM
+    store @last_interrupt, r0
+
+    mov r0, IRQ_SYSTEM
+    storeb @INT_ACK, r0
+
+    popa
+    iret
+
+; VBlank start interrupt handler
+bios_vblank_default:
+    pusha
+
+    mov r0, IRQ_VBLANK_START
+    store @last_interrupt, r0
+
+    mov r0, 1
+    store @frame_ready, r0
+
+    load r0, @frame_counter
+    inc r0
+    store @frame_counter, r0
+
+    mov r0, 0x0001
+    store @VPU_IRQ_STATUS, r0
+
+    mov r0, IRQ_VBLANK_START
+    storeb @INT_ACK, r0
+
+    popa
+    iret
+
+; Timer interrupt handler
+bios_timer_default:
+    pusha
+
+    mov r0, IRQ_TIMER
+    store @last_interrupt, r0
+
+    load r0, @timer_ticks
+    inc r0
+    store @timer_ticks, r0
+
+    mov r0, IRQ_TIMER
+    storeb @INT_ACK, r0
+
+    popa
+     iret
+
+; Input handler
+bios_input_default:
+    pusha
+
+    mov r0, IRQ_INPUT
+    store @last_interrupt, r0
+
+    load r0, @INPUT_PAD0
+    store @pad0_state, r0
+
+    load r0, @INPUT_PAD1
+    store @pad1_state, r0
+
+    mov r0, 1
+    store @input_ready, r0
+
+    mov r0, IRQ_INPUT
+    storeb @INT_ACK, r0
+
+    popa
+    iret
+
+bios_audio_default:
+    pusha
+
+    mov r0, IRQ_AUDIO
+    store @last_interrupt, r0
+
+    load r1, @APU_IRQ_STATUS
+    store @audio_event, r1
+
+    load r0, @audio_ticks
+    inc r0
+    store @audio_ticks, r0
+
+    store @APU_IRQ_STATUS, r1
+
+    mov r0, IRQ_AUDIO
+    storeb @INT_ACK, r0
+
+    popa
+    iret
+
+bios_dma_default:
+    pusha
+
+    mov r0, IRQ_DMA_COMPLETE
+    store @last_interrupt, r0
+
+    load r0, @DMA_STATUS
+    store @dma_status, r0
+
+    mov r0, 1
+    store @dma_done, r0
+
+    mov r0, IRQ_DMA_COMPLETE
+    storeb @INT_ACK, r0
+
+    popa
+    iret
+
+bios_cartridge_default:
+    pusha
+
+    mov r0, IRQ_CART_COMPLETE
+    store @last_interrupt, r0
+
+    load r0, @CART_STATUS
+    store @cart_status, r0
+
+    mov r0, 1
+    store @cart_ready, r0
+
+    mov r0, 0x00FF
+    storeb @CART_IRQ_STATUS, r0
+
+    mov r0, IRQ_CART_COMPLETE
+    storeb @INT_ACK, r0
+
+    popa
+    iret
+
+bios_vblank_end_default:
+    pusha
+
+    mov r0, IRQ_VBLANK_END
+    store @last_interrupt, r0
+
+    mov r0, 0x0002
+    store @VPU_IRQ_STATUS, r0
+
+    mov r0, IRQ_VBLANK_END
+    storeb @INT_ACK, r0
+
+    popa
+    iret
+
+bios_hblank_default:
+    pusha
+
+    mov r0, IRQ_HBLANK
+    store @last_interrupt, r0
+
+    mov r0, 0x0004
+    store @VPU_IRQ_STATUS, r0
+
+    mov r0, IRQ_HBLANK
+    storeb @INT_ACK, r0
+
+    popa
+    iret
+
+bios_pcm_default:
+    pusha
+    
+    mov r0, IRQ_PCM_COMPLETE
+    store @last_interrupt, r0
+
+    load r1, @APU_IRQ_STATUS
+    store @audio_event, r1
+
+    mov r0, 0x0002
+    store @APU_IRQ_STATUS, r0
+
+    mov r0, IRQ_PCM_COMPLETE
+    storeb @INT_ACK, r0
+
+    popa
+    iret
+
+bios_invalid_access_default:
+    pusha
+
+    mov r0, IRQ_INVALID_ACCESS
+    store @last_interrupt, r0
+
+    load r0, @invalid_irq_count
+    inc r0
+    store @invalid_irq_count, r0
+
+    mov r0, 1
+    storeb @DBG_BREAK, r0
+
+    mov r0, IRQ_INVALID_ACCESS
+    storeb @INT_ACK, r0
+
+    popa
+    iret
+
+bios_debug_default:
+    pusha
+
+    mov r0, IRQ_DEBUG
+    store @last_interrupt, r0
+
+    mov r0, 1
+    storeb @DBG_BREAK, r0
+
+    mov r0, IRQ_DEBUG
+    storeb @INT_ACK, r0
+
+    popa
+    iret
+
+bios_reserved_12:
+    pusha
+
+    mov r0, 12
+    store @last_interrupt, r0
+
+    load r1, @invalid_irq_count
+    inc r1
+    store @invalid_irq_count, r1
+
+    mov r0, 12
+    storeb @INT_ACK, r0
+
+    popa
+    iret
+
+bios_reserved_13:
+    pusha
+
+    mov r0, 12
+    store @last_interrupt, r0
+
+    load r1, @invalid_irq_count
+    inc r1
+    store @invalid_irq_count, r1
+
+    mov r0, 12
+    storeb @INT_ACK, r0
+
+    popa
+    iret
+
+bios_reserved_14:
+    pusha
+
+    mov r0, 12
+    store @last_interrupt, r0
+
+    load r1, @invalid_irq_count
+    inc r1
+    store @invalid_irq_count, r1
+
+    mov r0, 12
+    storeb @INT_ACK, r0
+
+    popa
+    iret
+
+bios_reserved_15:
+    pusha
+
+    mov r0, 12
+    store @last_interrupt, r0
+
+    load r1, @invalid_irq_count
+    inc r1
+    store @invalid_irq_count, r1
+
+    mov r0, 12
+    storeb @INT_ACK, r0
+
+    popa
+    iret
+

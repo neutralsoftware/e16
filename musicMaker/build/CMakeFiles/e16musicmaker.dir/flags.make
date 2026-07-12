@@ -4,7 +4,7 @@
 # compile CXX with /opt/homebrew/opt/llvm/bin/clang++
 CXX_DEFINES = 
 
-CXX_INCLUDES = -I/Users/maxvdec/Coding/Projects/E16/musicMaker/include -I/opt/homebrew/include
+CXX_INCLUDES = -I/Users/maxvdec/Coding/Projects/E16/musicMaker/include -I/opt/homebrew/include -isystem /opt/homebrew/Cellar/libsndfile/1.2.2_1/include -isystem /opt/homebrew/Cellar/flac/1.5.0/include -isystem /opt/homebrew/Cellar/libvorbis/1.3.7/include -isystem /opt/homebrew/Cellar/libogg/1.3.6/include -isystem /opt/homebrew/Cellar/opus/1.6.1/include/opus -isystem /opt/homebrew/Cellar/mpg123/1.33.5/include
 
 CXX_FLAGSarm64 = -std=c++20 -arch arm64 -Wall -Wextra -Wpedantic
 

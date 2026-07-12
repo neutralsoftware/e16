@@ -202,6 +202,30 @@ src/main.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/e16musicmaker.dir/build.make CMakeFiles/e16musicmaker.dir/src/main.cpp.s
 .PHONY : src/main.cpp.s
 
+src/pcm_import.o: src/pcm_import.cpp.o
+.PHONY : src/pcm_import.o
+
+# target to build an object file
+src/pcm_import.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/e16musicmaker.dir/build.make CMakeFiles/e16musicmaker.dir/src/pcm_import.cpp.o
+.PHONY : src/pcm_import.cpp.o
+
+src/pcm_import.i: src/pcm_import.cpp.i
+.PHONY : src/pcm_import.i
+
+# target to preprocess a source file
+src/pcm_import.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/e16musicmaker.dir/build.make CMakeFiles/e16musicmaker.dir/src/pcm_import.cpp.i
+.PHONY : src/pcm_import.cpp.i
+
+src/pcm_import.s: src/pcm_import.cpp.s
+.PHONY : src/pcm_import.s
+
+# target to generate assembly for a file
+src/pcm_import.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/e16musicmaker.dir/build.make CMakeFiles/e16musicmaker.dir/src/pcm_import.cpp.s
+.PHONY : src/pcm_import.cpp.s
+
 src/song.o: src/song.cpp.o
 .PHONY : src/song.o
 
@@ -244,6 +268,9 @@ help:
 	@echo "... src/main.o"
 	@echo "... src/main.i"
 	@echo "... src/main.s"
+	@echo "... src/pcm_import.o"
+	@echo "... src/pcm_import.i"
+	@echo "... src/pcm_import.s"
 	@echo "... src/song.o"
 	@echo "... src/song.i"
 	@echo "... src/song.s"
