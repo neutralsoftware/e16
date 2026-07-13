@@ -6,6 +6,10 @@
 
 .const OAM_BASE, 0xFF1200
 
+.const animation_letters_y,  0x000100
+.const animation_state, 0x000102
+.const shine_frame, 0x000104
+
 start_vpu:
     mov r0, 0b0000000000001111
     store @VPU_CONTROL, r0
@@ -13,86 +17,173 @@ start_vpu:
     mov r0, 0x0 
     store @VPU_BACKDROP, r0
 
-; r12 (tile), r13 (sprite index), r14 (x), r15 (y)
+; r12 = tile
+; r13 = sprite index
+; r14 = x
+; r15 = y
+; r11 = palette
+
 render_letter:
     mov r4, r13
     mul r4, 8
     set dp, OAM_BASE
 
-    ; Storing X
-    storeb @r4, r14
-    inc r4
-    shr r14, 8
+    ; X low byte
     storeb @r4, r14
     inc r4
 
-    ; Storing Y
-    storeb @r4, r15
+    ; X high byte
+    mov r5, r14
+    shr r5, 8
+    storeb @r4, r5
     inc r4
-    shr r15, 8
+
+    ; Y low byte
     storeb @r4, r15
     inc r4
 
-    ; Storing Tile Index
-    storeb @r4, r12
+    ; Y high byte
+    mov r5, r15
+    shr r5, 8
+    storeb @r4, r5
     inc r4
-    shr r12, 8
+
+    ; Tile low byte
     storeb @r4, r12
     inc r4
 
+    ; Tile high byte
+    mov r5, r12
+    shr r5, 8
+    storeb @r4, r5
+    inc r4
+
+    ; Palette
     storeb @r4, r11
     inc r4
 
+    ; Flags
     mov r5, 0b00000110
     storeb @r4, r5
+
     ret
 
-test_render:
-    mov r14, 40
-    mov r15, 40
+; r0 (start x), r1 (start y) 
+render_title:
+    mov r14, r0 
+    mov r15, r1
     mov r12, E_FIRST_TILE + E_E_NORMAL_TILE_INDEX
     mov r13, 0
     mov r11, E_PALETTE
     call render_letter
 
-    mov r14, 80
-    mov r15, 40
+    mov r14, r0 ; + 35
+    add r14, 35
+    mov r15, r1 ; - 1
+    dec r15
     mov r12, M_FIRST_TILE + M_M_NORMAL_TILE_INDEX
     mov r13, 1
     mov r11, M_PALETTE
     call render_letter
 
-    mov r14, 120
-    mov r15, 40
+     ; + 35
+    add r14, 35
+     ; =
     mov r12, B_FIRST_TILE + B_B_NORMAL_TILE_INDEX
     mov r13, 2
     mov r11, B_PALETTE
     call render_letter
 
-    mov r14, 160
-    mov r15, 40
+    add r14, 30 ; + 30
+    inc r15 ; + 1
     mov r12, E2_FIRST_TILE + E2_E2_NORMAL_TILE_INDEX 
     mov r13, 3
     mov r11, E2_PALETTE
     call render_letter
 
-    mov r14, 200
-    mov r15, 40
+    add r14, 30 ; + 30
+    dec r15 ; - 1
     mov r12, R_FIRST_TILE + R_R_NORMAL_TILE_INDEX
     mov r13, 4
     mov r11, R_PALETTE
     call render_letter
 
-    mov r14, 240
-    mov r15, 40
+    add r14, 40 ; + 40
+    inc r15
     mov r12, ONE_FIRST_TILE + ONE_A1_NORMAL_TILE_INDEX 
     mov r13, 5
     mov r11, ONE_PALETTE
     call render_letter
 
-    mov r14, 280
-    mov r15, 40
+    add r14, 25 ; + 25
+    dec r15 ; - 1
     mov r12, SIX_FIRST_TILE + SIX_A6_NORMAL_TILE_INDEX
+    mov r13, 6
+    mov r11, SIX_PALETTE
+    call render_letter
+    
+    
+    ret
+    
+
+; r0 (start x), r1 (start y), r2 (shine state) 
+render_title_shine:
+    mov r14, r0 
+    mov r15, r1
+    mov r12, E_FIRST_TILE + E_E_SHINE1_TILE_INDEX 
+    mul r2, 16
+    add r12, r2
+    mov r13, 0
+    mov r11, E_PALETTE
+    call render_letter
+
+    mov r14, r0 ; + 35
+    add r14, 35
+    mov r15, r1 ; - 1
+    dec r15
+    mov r12, M_FIRST_TILE + M_M_SHINE1_TILE_INDEX
+    add r12, r2
+    mov r13, 1
+    mov r11, M_PALETTE
+    call render_letter
+
+     ; + 35
+    add r14, 35
+     ; =
+    mov r12, B_FIRST_TILE + B_B_SHINE1_TILE_INDEX
+    add r12, r2
+    mov r13, 2
+    mov r11, B_PALETTE
+    call render_letter
+
+    add r14, 30 ; + 30
+    inc r15 ; + 1
+    mov r12, E2_FIRST_TILE + E2_E2_SHINE1_TILE_INDEX
+    add r12, r2
+    mov r13, 3
+    mov r11, E2_PALETTE
+    call render_letter
+
+    add r14, 30 ; + 30
+    dec r15 ; - 1
+    mov r12, R_FIRST_TILE + R_R_SHINE1_TILE_INDEX
+    add r12, r2
+    mov r13, 4
+    mov r11, R_PALETTE
+    call render_letter
+
+    add r14, 40 ; + 40
+    inc r15
+    mov r12, ONE_FIRST_TILE + ONE_A1_SHINE1_TILE_INDEX 
+    add r12, r2
+    mov r13, 5
+    mov r11, ONE_PALETTE
+    call render_letter
+
+    add r14, 25 ; + 25
+    dec r15 ; - 1
+    mov r12, SIX_FIRST_TILE + SIX_A6_SHINE1_TILE_INDEX 
+    add r12, r2
     mov r13, 6
     mov r11, SIX_PALETTE
     call render_letter
@@ -101,3 +192,53 @@ test_render:
     ret
 
 
+animation_init:
+    mov r0, -32
+    store @animation_letters_y, r0
+    clr r0
+    store @animation_state, r0
+    ret
+
+animation_update:
+    load r2, @animation_state
+    cmp r2, 0
+    beq animation_fall
+    cmp r2, 1
+    beq animation_bounce 
+    cmp r2, 2
+    beq animation_shine
+  
+animation_shine:
+    mov r0, 46
+    load r1, @animation_letters_y
+    mov r2, -1
+    call render_title_shine 
+    ret
+
+animation_fall:
+    mov r0, 46
+    load r1, @animation_letters_y
+    call render_title
+    
+    cmp r1, 80
+    beq animation_next 
+    inc r1
+    store @animation_letters_y, r1
+    ret
+
+animation_bounce:
+    mov r0, 46
+    load r1, @animation_letters_y
+    call render_title
+    
+    cmp r1, 74
+    beq animation_next 
+    dec r1
+    store @animation_letters_y, r1
+    ret
+
+animation_next:
+    load r0, @animation_state
+    inc r0
+    store @animation_state, r0 
+    ret

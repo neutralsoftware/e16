@@ -45,11 +45,12 @@ init_interrupts:
 startup_animation:
     call start_vpu
     call copy_title_palette
-    call copy_letters
+    call copy_letters 
+    call animation_init
 
 animation_loop:
     wait
-    call test_render
+    call animation_update
     bra animation_loop
 
 verify_signature:
