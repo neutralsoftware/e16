@@ -5,6 +5,7 @@ jmp start
 .include "./utils.e16"
 .include "./graphics/copyData.e16"
 .include "./graphics/background.e16"
+.include "./songs/startup.e16"
 
 .const STACK_ADDR, 0x40000
 .const BIOS_IVT_ADDR, 0xFEFFD0
@@ -42,15 +43,18 @@ init_interrupts:
     
 .const APU_CONTROL, 0xFF2000
 .const APU_MASTER_VOL, 0xFF2004
+.const APU_MASTER_PAN, 0xFF2006
 
 startup_animation:
     call start_vpu
     call copy_title_palette
     call copy_letters 
     call animation_init
+    call STARTUP_music_play_once
 
 animation_loop:
     wait
+    call STARTUP_music_update
     call animation_update
     load r0, @animation_state
     cmp r0, 4
@@ -58,7 +62,8 @@ animation_loop:
 
 clean_startup:
     wait
-    call clear_oam
+    call STARTUP_music_stop
+    call clear_system_resources
 
 verify_signature:
     loadb r0, @CART_ROM
@@ -84,6 +89,7 @@ valid_cartridge:
     bra enter_rom
 
 invalid_cartridge:
+    call start_vpu
     call copy_corrupted
 
 invalid_cartridge_loop:
@@ -92,6 +98,7 @@ invalid_cartridge_loop:
     bra invalid_cartridge_loop
 
 missing_cartridge:
+    call start_vpu
     call copy_missing
 
 missing_cartridge_loop:
@@ -126,13 +133,77 @@ disable_peripherals:
     store @APU_MASTER_VOL, r0
 
     ret
+
+clear_vpu_state:
+    set dp, 0xFF1000
+    clr r0
+    clr r1
+    mov r2, 4096
+clear_vpu_state_loop:
+    storeb @r0, r1
+    inc r0
+    dec r2
+    bne clear_vpu_state_loop
+    mov r0, 0xFFFF
+    store @VPU_STATUS, r0
+    store @VPU_IRQ_STATUS, r0
+    ret
+
+clear_apu_state:
+    mov r0, 0x0008
+    store @APU_CONTROL, r0
+    clr r0
+    store @APU_CONTROL, r0
+    store @APU_IRQ_ENABLE, r0
+    mov r0, 0xFFFF
+    store @APU_MASTER_VOL, r0
+    store @APU_MASTER_PAN, r0
+    store @APU_STATUS, r0
+    store @APU_IRQ_STATUS, r0
+    ret
+
+clear_audio_ram:
+    set dp, 0x060000
+    clr r0
+    clr r1
+    mov r2, 0x8000
+clear_audio_ram_loop:
+    storeb @r0, r1
+    inc r0
+    dec r2
+    bne clear_audio_ram_loop
+    ret
+
+clear_dma_state:
+    set dp, 0xFF0300
+    clr r0
+    clr r1
+    mov r2, 256
+clear_dma_state_loop:
+    storeb @r0, r1
+    inc r0
+    dec r2
+    bne clear_dma_state_loop
+    ret
+
+clear_system_resources:
+    call disable_peripherals
+    call clear_vpu_state
+    call clear_vram
+    call clear_apu_state
+    call clear_audio_ram
+    call clear_dma_state
+    ret
     
 enter_rom:
-    ei
+    di
+    call STARTUP_music_stop
+    call clear_system_resources
     call clear_registers
-    call disable_peripherals
-    call clear_oam
-    call clear_vram
+    set dp, 0x000000
+    set sp, STACK_ADDR
+    set fp, STACK_ADDR
+    ei
     set pc, 0x200040
     ; This will jump to the ROM code at address 0x200000
 

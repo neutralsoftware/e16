@@ -1,0 +1,670 @@
+.const STARTUP_APU_CONTROL, 0xFF2000
+.const STARTUP_APU_MASTER_VOL, 0xFF2004
+.const STARTUP_CH_FREQ, 0x04
+.const STARTUP_CH_VOLUME, 0x06
+.const STARTUP_CH_PARAM, 0x0E
+.const STARTUP_CH_CONTROL, 0x00
+.const STARTUP_CH_LENGTH, 0x0A
+.const STARTUP_CH_BASE, 0x10
+.const STARTUP_WAVETABLE_RAM, 0x060000
+.const STARTUP_PCM_RAM, 0x060100
+.const STARTUP_WAVETABLE_LENGTH, 32
+.const STARTUP_PCM_LENGTH, 0
+.const STARTUP_PCM_RATE, 8000
+.const STARTUP_STATE_BASE, 0x000150
+.const STARTUP_STEP_STATE, STARTUP_STATE_BASE
+.const STARTUP_WAIT_STATE, STARTUP_STATE_BASE + 2
+.const STARTUP_PLAYING_STATE, STARTUP_STATE_BASE + 4
+.const STARTUP_LOOP_STATE, STARTUP_STATE_BASE + 6
+.const STARTUP_APU_CH0_BASE, 0xFF2100
+.const STARTUP_APU_CH1_BASE, 0xFF2120
+.const STARTUP_APU_CH2_BASE, 0xFF2140
+.const STARTUP_APU_CH3_BASE, 0xFF2160
+.const STARTUP_APU_CH4_BASE, 0xFF2180
+.const STARTUP_APU_CH5_BASE, 0xFF21A0
+
+    bra STARTUP_music_module_end
+
+STARTUP_music_play:
+    push r0
+    mov r0, 1
+    storew @STARTUP_LOOP_STATE, r0
+    bra STARTUP_music_play_start
+
+STARTUP_music_play_once:
+    push r0
+    mov r0, 0
+    storew @STARTUP_LOOP_STATE, r0
+STARTUP_music_play_start:
+    call STARTUP_music_load_samples
+    mov r0, 0x0023
+    storew @STARTUP_APU_CONTROL, r0
+    mov r0, 0xFFFF
+    storew @STARTUP_APU_MASTER_VOL, r0
+    mov r0, 2
+    storew @(STARTUP_APU_CH0_BASE + STARTUP_CH_PARAM), r0
+    mov r0, 1
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_PARAM), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_PARAM), r0
+    mov r0, STARTUP_WAVETABLE_LENGTH
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_LENGTH), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_BASE), r0
+    mov r0, 6
+    storeb @(STARTUP_APU_CH4_BASE + STARTUP_CH_BASE + 2), r0
+    mov r0, STARTUP_PCM_LENGTH
+    storew @(STARTUP_APU_CH5_BASE + STARTUP_CH_LENGTH), r0
+    mov r0, 0x0100
+    storew @(STARTUP_APU_CH5_BASE + STARTUP_CH_BASE), r0
+    mov r0, 6
+    storeb @(STARTUP_APU_CH5_BASE + STARTUP_CH_BASE + 2), r0
+    mov r0, 0
+    storew @STARTUP_STEP_STATE, r0
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 1
+    storew @STARTUP_PLAYING_STATE, r0
+    call STARTUP_music_update
+    pop r0
+    ret
+
+STARTUP_music_load_samples:
+    push r0
+    push r2
+    mov r2, 0
+STARTUP_music_load_wavetable_loop:
+    loadb r0, @(STARTUP_music_wavetable_data + r2)
+    storeb @(STARTUP_WAVETABLE_RAM + r2), r0
+    inc r2
+    cmp r2, STARTUP_WAVETABLE_LENGTH
+    blt STARTUP_music_load_wavetable_loop
+    pop r2
+    pop r0
+    ret
+
+STARTUP_music_stop:
+    push r0
+    mov r0, 0
+    storew @STARTUP_PLAYING_STATE, r0
+    storew @(STARTUP_APU_CH0_BASE + STARTUP_CH_CONTROL), r0
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_CONTROL), r0
+    storew @(STARTUP_APU_CH2_BASE + STARTUP_CH_CONTROL), r0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_CONTROL), r0
+    storew @(STARTUP_APU_CH5_BASE + STARTUP_CH_CONTROL), r0
+    pop r0
+    ret
+
+STARTUP_music_update:
+    push r0
+    push r1
+    loadw r0, @STARTUP_PLAYING_STATE
+    cmp r0, 0
+    beq STARTUP_music_update_done
+    loadw r0, @STARTUP_WAIT_STATE
+    cmp r0, 0
+    beq STARTUP_music_update_advance
+    dec r0
+    storew @STARTUP_WAIT_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_update_advance:
+    loadw r1, @STARTUP_STEP_STATE
+    cmp r1, 0
+    beq STARTUP_music_step_0
+    cmp r1, 1
+    beq STARTUP_music_step_1
+    cmp r1, 2
+    beq STARTUP_music_step_2
+    cmp r1, 3
+    beq STARTUP_music_step_3
+    cmp r1, 4
+    beq STARTUP_music_step_4
+    cmp r1, 5
+    beq STARTUP_music_step_5
+    cmp r1, 6
+    beq STARTUP_music_step_6
+    cmp r1, 7
+    beq STARTUP_music_step_7
+    cmp r1, 8
+    beq STARTUP_music_step_8
+    cmp r1, 9
+    beq STARTUP_music_step_9
+    cmp r1, 10
+    beq STARTUP_music_step_10
+    cmp r1, 11
+    beq STARTUP_music_step_11
+    cmp r1, 12
+    beq STARTUP_music_step_12
+    cmp r1, 13
+    beq STARTUP_music_step_13
+    cmp r1, 14
+    beq STARTUP_music_step_14
+    cmp r1, 15
+    beq STARTUP_music_step_15
+    cmp r1, 16
+    beq STARTUP_music_step_16
+    cmp r1, 17
+    beq STARTUP_music_step_17
+    cmp r1, 18
+    beq STARTUP_music_step_18
+    cmp r1, 19
+    beq STARTUP_music_step_19
+    cmp r1, 20
+    beq STARTUP_music_step_20
+    cmp r1, 21
+    beq STARTUP_music_step_21
+    cmp r1, 22
+    beq STARTUP_music_step_22
+    cmp r1, 23
+    beq STARTUP_music_step_23
+    cmp r1, 24
+    beq STARTUP_music_step_24
+    cmp r1, 25
+    beq STARTUP_music_step_25
+    cmp r1, 26
+    beq STARTUP_music_step_26
+    cmp r1, 27
+    beq STARTUP_music_step_27
+    cmp r1, 28
+    beq STARTUP_music_step_28
+    cmp r1, 29
+    beq STARTUP_music_step_29
+    cmp r1, 30
+    beq STARTUP_music_step_30
+    cmp r1, 31
+    beq STARTUP_music_step_31
+    call STARTUP_music_stop
+    bra STARTUP_music_update_done
+STARTUP_music_step_0:
+    mov r0, 131
+    storew @(STARTUP_APU_CH0_BASE + STARTUP_CH_FREQ), r0
+    mov r0, 0x242C
+    storew @(STARTUP_APU_CH0_BASE + STARTUP_CH_VOLUME), r0
+    mov r0, 0x0003
+    storew @(STARTUP_APU_CH0_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH2_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 13
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 1
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_1:
+    mov r0, 311
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_FREQ), r0
+    mov r0, 0x2820
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_VOLUME), r0
+    mov r0, 0x0003
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH2_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 13
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 2
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_2:
+    mov r0, 392
+    storew @(STARTUP_APU_CH2_BASE + STARTUP_CH_FREQ), r0
+    mov r0, 0x3535
+    storew @(STARTUP_APU_CH2_BASE + STARTUP_CH_VOLUME), r0
+    mov r0, 0x0003
+    storew @(STARTUP_APU_CH2_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 13
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 3
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_3:
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 587
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_FREQ), r0
+    mov r0, 0x3035
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_VOLUME), r0
+    mov r0, 0x0003
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 12
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 4
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_4:
+    mov r0, 0
+    storew @(STARTUP_APU_CH0_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 622
+    storew @(STARTUP_APU_CH2_BASE + STARTUP_CH_FREQ), r0
+    mov r0, 0x3535
+    storew @(STARTUP_APU_CH2_BASE + STARTUP_CH_VOLUME), r0
+    mov r0, 0x0003
+    storew @(STARTUP_APU_CH2_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 784
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_FREQ), r0
+    mov r0, 0x3035
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_VOLUME), r0
+    mov r0, 0x0003
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 13
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 5
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_5:
+    mov r0, 0
+    storew @(STARTUP_APU_CH0_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 13
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 6
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_6:
+    mov r0, 208
+    storew @(STARTUP_APU_CH0_BASE + STARTUP_CH_FREQ), r0
+    mov r0, 0x242C
+    storew @(STARTUP_APU_CH0_BASE + STARTUP_CH_VOLUME), r0
+    mov r0, 0x0003
+    storew @(STARTUP_APU_CH0_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 262
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_FREQ), r0
+    mov r0, 0x2820
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_VOLUME), r0
+    mov r0, 0x0003
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 13
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 7
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_7:
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 13
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 8
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_8:
+    mov r0, 33
+    storew @(STARTUP_APU_CH0_BASE + STARTUP_CH_FREQ), r0
+    mov r0, 0x242C
+    storew @(STARTUP_APU_CH0_BASE + STARTUP_CH_VOLUME), r0
+    mov r0, 0x0003
+    storew @(STARTUP_APU_CH0_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 392
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_FREQ), r0
+    mov r0, 0x2820
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_VOLUME), r0
+    mov r0, 0x0003
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 523
+    storew @(STARTUP_APU_CH2_BASE + STARTUP_CH_FREQ), r0
+    mov r0, 0x3535
+    storew @(STARTUP_APU_CH2_BASE + STARTUP_CH_VOLUME), r0
+    mov r0, 0x0003
+    storew @(STARTUP_APU_CH2_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 165
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_FREQ), r0
+    mov r0, 0x3035
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_VOLUME), r0
+    mov r0, 0x0003
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 13
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 9
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_9:
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 12
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 10
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_10:
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 13
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 11
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_11:
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 13
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 12
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_12:
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 13
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 13
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_13:
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 13
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 14
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_14:
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 13
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 15
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_15:
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 13
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 16
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_16:
+    mov r0, 0
+    storew @(STARTUP_APU_CH0_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH2_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 12
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 17
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_17:
+    mov r0, 0
+    storew @(STARTUP_APU_CH0_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH2_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 13
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 18
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_18:
+    mov r0, 0
+    storew @(STARTUP_APU_CH0_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH2_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 13
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 19
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_19:
+    mov r0, 0
+    storew @(STARTUP_APU_CH0_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH2_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 13
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 20
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_20:
+    mov r0, 0
+    storew @(STARTUP_APU_CH0_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH2_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 13
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 21
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_21:
+    mov r0, 0
+    storew @(STARTUP_APU_CH0_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH2_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 13
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 22
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_22:
+    mov r0, 0
+    storew @(STARTUP_APU_CH0_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH2_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 12
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 23
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_23:
+    mov r0, 0
+    storew @(STARTUP_APU_CH0_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH2_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 13
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 24
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_24:
+    mov r0, 0
+    storew @(STARTUP_APU_CH0_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH2_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 13
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 25
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_25:
+    mov r0, 0
+    storew @(STARTUP_APU_CH0_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH2_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 13
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 26
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_26:
+    mov r0, 0
+    storew @(STARTUP_APU_CH0_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH2_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 13
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 27
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_27:
+    mov r0, 0
+    storew @(STARTUP_APU_CH0_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH2_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 13
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 28
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_28:
+    mov r0, 0
+    storew @(STARTUP_APU_CH0_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH2_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 13
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 29
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_29:
+    mov r0, 0
+    storew @(STARTUP_APU_CH0_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH2_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 12
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 30
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_30:
+    mov r0, 0
+    storew @(STARTUP_APU_CH0_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH2_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 13
+    storew @STARTUP_WAIT_STATE, r0
+    mov r0, 31
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_step_31:
+    mov r0, 0
+    storew @(STARTUP_APU_CH0_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH1_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH2_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH3_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 0
+    storew @(STARTUP_APU_CH4_BASE + STARTUP_CH_CONTROL), r0
+    mov r0, 13
+    storew @STARTUP_WAIT_STATE, r0
+    loadw r0, @STARTUP_LOOP_STATE
+    cmp r0, 0
+    beq STARTUP_music_last_step_once
+    mov r0, 0
+    bra STARTUP_music_last_step_store
+STARTUP_music_last_step_once:
+    mov r0, 32
+STARTUP_music_last_step_store:
+    storew @STARTUP_STEP_STATE, r0
+    bra STARTUP_music_update_done
+STARTUP_music_update_done:
+    pop r1
+    pop r0
+    ret
+
+STARTUP_music_wavetable_data:
+    .byte 1, 9, 17, 25, 33, 41, 49, 57, 65, 72, 80, 88, 96, 104, 112, 120
+    .byte 128, 136, 144, 152, 160, 168, 176, 184, 192, 199, 207, 215, 223, 231, 239, 247
+STARTUP_music_pcm_data:
+STARTUP_music_module_end:
