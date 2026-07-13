@@ -1,5 +1,6 @@
 
 .symbols "./copyData.e16"
+.symbols "../utils.e16"
 
 .const VPU_CONTROL, 0xFF1000
 .const VPU_BACKDROP, 0xFF1008
@@ -9,6 +10,14 @@
 .const animation_letters_y,  0x000100
 .const animation_state, 0x000102
 .const shine_frame, 0x000104
+.const actual_shine_frame, 0x000106
+.const glow_frame, 0x000108
+.const glow_factor_frame, 0x00010A
+.const glow_hold_frame, 0x00010C
+
+.const SHINE_FACTOR, 4
+.const GLOW_FACTOR, 2
+.const GLOW_HOLD_FRAMES, 30
 
 start_vpu:
     mov r0, 0b0000000000001111
@@ -125,14 +134,88 @@ render_title:
     
     ret
     
+render_title_glow:
+    cmp r2, 0
+    beq render_title
+    mov r9, r2
+    dec r9
+    mul r9, 16
 
-; r0 (start x), r1 (start y), r2 (shine state) 
+    mov r14, r0
+    mov r15, r1
+    mov r12, E_FIRST_TILE + E_E_GLOW1_TILE_INDEX
+    add r12, r9
+    mov r13, 0
+    mov r11, E_PALETTE
+    call render_letter
+
+    mov r14, r0
+    add r14, 35
+    mov r15, r1
+    dec r15
+    mov r12, M_FIRST_TILE + M_M_GLOW1_TILE_INDEX
+    add r12, r9
+    mov r13, 1
+    mov r11, M_PALETTE
+    call render_letter
+
+    add r14, 35
+    mov r12, B_FIRST_TILE + B_B_GLOW1_TILE_INDEX
+    add r12, r9
+    mov r13, 2
+    mov r11, B_PALETTE
+    call render_letter
+
+    add r14, 30
+    inc r15
+    mov r12, E2_FIRST_TILE + E2_E2_GLOW1_TILE_INDEX
+    add r12, r9
+    mov r13, 3
+    mov r11, E2_PALETTE
+    call render_letter
+
+    add r14, 30
+    dec r15
+    mov r12, R_FIRST_TILE + R_R_GLOW1_TILE_INDEX
+    add r12, r9
+    mov r13, 4
+    mov r11, R_PALETTE
+    call render_letter
+
+    add r14, 40
+    inc r15
+    mov r12, ONE_FIRST_TILE + ONE_A1_GLOW1_TILE_INDEX
+    add r12, r9
+    mov r13, 5
+    mov r11, ONE_PALETTE
+    call render_letter
+
+    add r14, 25
+    dec r15
+    mov r12, SIX_FIRST_TILE + SIX_A6_GLOW1_TILE_INDEX
+    add r12, r9
+    mov r13, 6
+    mov r11, SIX_PALETTE
+    call render_letter
+
+    ret
+
+; r0 (start x), r1 (start y), r2 (shine frame) 
 render_title_shine:
+    mov r9, r2
     mov r14, r0 
     mov r15, r1
     mov r12, E_FIRST_TILE + E_E_SHINE1_TILE_INDEX 
+    
+    ; Check the shine frame
+    mov r6, r9
+    mov r7, 0 ; letter E
+    call get_tile_offset_shine
+    
+    mov r2, r8
     mul r2, 16
     add r12, r2
+    
     mov r13, 0
     mov r11, E_PALETTE
     call render_letter
@@ -142,6 +225,13 @@ render_title_shine:
     mov r15, r1 ; - 1
     dec r15
     mov r12, M_FIRST_TILE + M_M_SHINE1_TILE_INDEX
+    ; Check the shine frame
+    mov r6, r9
+    mov r7, 1 ; letter M
+    call get_tile_offset_shine
+    
+    mov r2, r8
+    mul r2, 16
     add r12, r2
     mov r13, 1
     mov r11, M_PALETTE
@@ -151,7 +241,16 @@ render_title_shine:
     add r14, 35
      ; =
     mov r12, B_FIRST_TILE + B_B_SHINE1_TILE_INDEX
+    
+    ; Check the shine frame
+    mov r6, r9
+    mov r7, 2 ; letter B
+    call get_tile_offset_shine
+    
+    mov r2, r8
+    mul r2, 16
     add r12, r2
+    
     mov r13, 2
     mov r11, B_PALETTE
     call render_letter
@@ -159,7 +258,16 @@ render_title_shine:
     add r14, 30 ; + 30
     inc r15 ; + 1
     mov r12, E2_FIRST_TILE + E2_E2_SHINE1_TILE_INDEX
+        
+    ; Check the shine frame
+    mov r6, r9
+    mov r7, 3 ; letter E
+    call get_tile_offset_shine
+    
+    mov r2, r8
+    mul r2, 16
     add r12, r2
+    
     mov r13, 3
     mov r11, E2_PALETTE
     call render_letter
@@ -167,7 +275,16 @@ render_title_shine:
     add r14, 30 ; + 30
     dec r15 ; - 1
     mov r12, R_FIRST_TILE + R_R_SHINE1_TILE_INDEX
+          
+    ; Check the shine frame
+    mov r6, r9
+    mov r7, 4 ; letter R
+    call get_tile_offset_shine
+    
+    mov r2, r8
+    mul r2, 16
     add r12, r2
+    
     mov r13, 4
     mov r11, R_PALETTE
     call render_letter
@@ -175,7 +292,16 @@ render_title_shine:
     add r14, 40 ; + 40
     inc r15
     mov r12, ONE_FIRST_TILE + ONE_A1_SHINE1_TILE_INDEX 
+            
+    ; Check the shine frame
+    mov r6, r9
+    mov r7, 5 ; letter 1
+    call get_tile_offset_shine
+    
+    mov r2, r8
+    mul r2, 16
     add r12, r2
+    
     mov r13, 5
     mov r11, ONE_PALETTE
     call render_letter
@@ -183,7 +309,16 @@ render_title_shine:
     add r14, 25 ; + 25
     dec r15 ; - 1
     mov r12, SIX_FIRST_TILE + SIX_A6_SHINE1_TILE_INDEX 
+                
+    ; Check the shine frame
+    mov r6, r9
+    mov r7, 6 ; letter 2
+    call get_tile_offset_shine
+    
+    mov r2, r8
+    mul r2, 16
     add r12, r2
+    
     mov r13, 6
     mov r11, SIX_PALETTE
     call render_letter
@@ -191,12 +326,87 @@ render_title_shine:
     
     ret
 
+; r6 (shine frame), r7 (letter), r8 (output)
+get_tile_offset_shine:
+    cmp r7, 0
+    beq get_tile_offset_shine_e
+    cmp r7, 1
+    beq get_tile_offset_shine_m
+    cmp r7, 2
+    beq get_tile_offset_shine_b
+    cmp r7, 3
+    beq get_tile_offset_shine_e2
+    cmp r7, 4
+    beq get_tile_offset_shine_r
+    cmp r7, 5
+    beq get_tile_offset_shine_one
+    cmp r7, 6
+    beq get_tile_offset_shine_six
+
+    mov r8, -1
+    ret
+
+get_tile_offset_shine_e:
+    cmp r6, 1
+    bgt get_tile_offset_shine_normal
+    mov r8, r6
+    ret
+get_tile_offset_shine_m:
+    cmp r6, 0
+    beq get_tile_offset_shine_normal
+    cmp r6, 3
+    bgt get_tile_offset_shine_normal
+    mov r8, r6
+    sub r8, 1
+    ret
+get_tile_offset_shine_b:
+    cmp r6, 3
+    bne get_tile_offset_shine_normal
+    mov r8, 0
+    ret
+get_tile_offset_shine_e2:
+    cmp r6, 4
+    blt get_tile_offset_shine_normal
+    cmp r6, 5
+    bgt get_tile_offset_shine_normal
+    mov r8, r6
+    sub r8, 4
+    ret
+get_tile_offset_shine_r:
+    cmp r6, 5
+    blt get_tile_offset_shine_normal
+    cmp r6, 6
+    bgt get_tile_offset_shine_normal
+    mov r8, r6
+    sub r8, 5
+    ret
+get_tile_offset_shine_one:
+    cmp r6, 6
+    bne get_tile_offset_shine_normal
+    mov r8, 0
+    ret
+get_tile_offset_shine_six:
+    cmp r6, 7
+    blt get_tile_offset_shine_normal
+    cmp r6, 8
+    bgt get_tile_offset_shine_normal
+    mov r8, r6
+    sub r8, 7
+    ret
+get_tile_offset_shine_normal:
+    mov r8, -1
+    ret
 
 animation_init:
     mov r0, -32
     store @animation_letters_y, r0
     clr r0
     store @animation_state, r0
+    store @shine_frame, r0
+    store @actual_shine_frame, r0
+    store @glow_frame, r0
+    store @glow_factor_frame, r0
+    store @glow_hold_frame, r0
     ret
 
 animation_update:
@@ -207,12 +417,77 @@ animation_update:
     beq animation_bounce 
     cmp r2, 2
     beq animation_shine
+    cmp r2, 3
+    beq animation_glow
+
+    ret
+
+
+animation_glow:
+    mov r0, 46
+    load r1, @animation_letters_y
+    load r2, @glow_frame
+    cmp r2, 2
+    bne animation_glow_render
+    load r3, @glow_hold_frame
+    cmp r3, GLOW_HOLD_FRAMES
+    beq animation_glow_done
+
+animation_glow_render:
+    call render_title_glow
+    load r2, @glow_frame
+    cmp r2, 2
+    beq animation_glow_hold
+    load r3, @glow_factor_frame
+    inc r3
+    cmp r3, GLOW_FACTOR
+    blt animation_glow_store_factor
+    clr r3
+    store @glow_factor_frame, r3
+    inc r2
+    store @glow_frame, r2
+    ret
+
+animation_glow_store_factor:
+    store @glow_factor_frame, r3
+    ret
+
+animation_glow_hold:
+    load r3, @glow_hold_frame
+    inc r3
+    store @glow_hold_frame, r3
+    ret
+
+animation_glow_done:
+    clr r2
+    call render_title_glow
+    call animation_next
+    ret
   
 animation_shine:
     mov r0, 46
     load r1, @animation_letters_y
-    mov r2, -1
+    load r2, @actual_shine_frame
     call render_title_shine 
+    load r2, @actual_shine_frame
+    cmp r2, 9
+    beq animation_shine_done
+    load r3, @shine_frame
+    inc r3
+    cmp r3, SHINE_FACTOR
+    blt animation_shine_store_factor
+    clr r3
+    store @shine_frame, r3
+    inc r2
+    store @actual_shine_frame, r2
+    ret
+
+animation_shine_store_factor:
+    store @shine_frame, r3
+    ret
+
+animation_shine_done:
+    call animation_next
     ret
 
 animation_fall:
