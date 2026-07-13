@@ -51,7 +51,14 @@ startup_animation:
 animation_loop:
     wait
     call animation_update
-    bra animation_loop
+    load r0, @animation_state
+    cmp r0, 4
+    bne animation_loop
+
+clean_startup:
+    wait
+    call clear_oam
+    bra clean_startup
 
 verify_signature:
     loadb r0, @CART_ROM
@@ -108,6 +115,8 @@ enter_rom:
     ei
     call clear_registers
     call disable_peripherals
+    call clear_oam
+    call clear_vram
     set pc, 0x200040
     ; This will jump to the ROM code at address 0x200000
 

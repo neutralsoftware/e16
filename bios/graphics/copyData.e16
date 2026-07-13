@@ -47,3 +47,13 @@ copy_letters:
     dma_copy one_tiles, SPR_TILES + (ONE_FIRST_TILE * 32), ONE_SPRITE_BYTES * ONE_SPRITE_COUNT
     dma_copy six_tiles, SPR_TILES + (SIX_FIRST_TILE * 32), SIX_SPRITE_BYTES * SIX_SPRITE_COUNT
     ret
+
+delete_title_palette:
+    dma_copy e_palette, PALETTE_BASE + (E_PALETTE * 32), E_PALETTE_BYTES
+    dma_copy m_palette, PALETTE_BASE + (M_PALETTE * 32), M_PALETTE_BYTES
+    dma_copy b_palette, PALETTE_BASE + (B_PALETTE * 32), B_PALETTE_BYTES
+    dma_copy e2_palette, PALETTE_BASE + (E2_PALETTE * 32), E2_PALETTE_BYTES
+    dma_copy r_palette, PALETTE_BASE + (R_PALETTE * 32), R_PALETTE_BYTES
+    dma_copy one_palette, PALETTE_BASE + (ONE_PALETTE * 32), ONE_PALETTE_BYTES
+    dma_copy six_palette, PALETTE_BASE + (SIX_PALETTE * 32), SIX_PALETTE_BYTES
+    ret

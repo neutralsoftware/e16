@@ -517,3 +517,33 @@ animation_next:
     inc r0
     store @animation_state, r0 
     ret
+
+clear_oam:
+    set dp, OAM_BASE
+    clr r0
+    mov r1, 64
+clear_oam_loop:
+    storeb @r0, r0
+    inc r0
+    dec r1
+    bne clear_oam_loop
+    ret
+
+clear_vram:
+    clr r1
+
+    set dp, 0x040000
+    clr r0
+clear_vram4:
+    storeb @r0, r1
+    inc r0
+    bne clear_vram4
+
+    set dp, 0x050000
+    clr r0
+
+clear_vram5:
+    storeb @r0, r1
+    inc r0
+    bne clear_vram5
+    ret
