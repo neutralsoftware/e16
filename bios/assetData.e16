@@ -5,6 +5,8 @@
 .include "./assets/R/r.e16"
 .include "./assets/1/one.e16"
 .include "./assets/6/six.e16"
+.include "./assets/corrupted.e16"
+.include "./assets/missing.e16"
 
 e_palette:
     .bin "./assets/E/E.e16spr", E_PALETTE_OFFSET, E_PALETTE_BYTES
@@ -47,3 +49,21 @@ one_tiles:
 
 six_tiles:
     .bin "./assets/6/six.e16spr", SIX_SPRITES_OFFSET, SIX_SPRITE_BYTES * SIX_SPRITE_COUNT
+
+corrupted_palette:
+    .bin "./assets/corrupted.e16bg", CORRUPTED_PALETTE_OFFSET, CORRUPTED_PALETTE_BYTES
+
+corrupted_tiles:
+    .bin "./assets/corrupted.e16bg", CORRUPTED_TILES_OFFSET, CORRUPTED_TILES_BYTES
+
+corrupted_map:
+    .bin "./assets/corrupted.e16bg", CORRUPTED_MAP_OFFSET, CORRUPTED_MAP_BYTES
+
+missing_palette:
+    .bin "./assets/missing.e16bg", MISSING_PALETTE_OFFSET, MISSING_PALETTE_BYTES
+
+missing_tiles:
+    .bin "./assets/missing.e16bg", MISSING_TILES_OFFSET, MISSING_TILES_BYTES
+
+missing_map:
+    .bin "./assets/missing.e16bg", MISSING_MAP_OFFSET, MISSING_MAP_BYTES

@@ -521,9 +521,10 @@ animation_next:
 clear_oam:
     set dp, OAM_BASE
     clr r0
-    mov r1, 64
+    clr r2
+    mov r1, 1024
 clear_oam_loop:
-    storeb @r0, r0
+    storeb @r0, r2
     inc r0
     dec r1
     bne clear_oam_loop

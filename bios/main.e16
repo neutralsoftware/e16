@@ -4,6 +4,7 @@ jmp start
 .include "./graphics/animation.e16"
 .include "./utils.e16"
 .include "./graphics/copyData.e16"
+.include "./graphics/background.e16"
 
 .const STACK_ADDR, 0x40000
 .const BIOS_IVT_ADDR, 0xFEFFD0
@@ -58,10 +59,12 @@ animation_loop:
 clean_startup:
     wait
     call clear_oam
-    bra clean_startup
 
 verify_signature:
     loadb r0, @CART_ROM
+    cmp r0, 0
+    beq missing_cartridge
+    
     cmp r0, 'E'
     bne invalid_cartridge
 
@@ -81,7 +84,20 @@ valid_cartridge:
     bra enter_rom
 
 invalid_cartridge:
-    halt ; For now, then we'll show an error message on the screen
+    call copy_corrupted
+
+invalid_cartridge_loop:
+    wait
+    call render_background
+    bra invalid_cartridge_loop
+
+missing_cartridge:
+    call copy_missing
+
+missing_cartridge_loop:
+    wait
+    call render_background
+    bra missing_cartridge_loop
     
 clear_registers:
     clr r0

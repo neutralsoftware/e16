@@ -1,5 +1,5 @@
 
-.string "E16C"
+.string "E16"
 
 .locate 0x200040
 

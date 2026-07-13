@@ -1,0 +1,28 @@
+.symbols "../assets/corrupted.e16"
+.symbols "./copyData.e16"
+
+.const BG0_CONTROL, 0xFF1100
+.const BG0_SCROLL_X, 0xFF1108
+.const BG0_SCROLL_Y, 0xFF110A
+.const BG0_WIDTH, 0xFF110C
+.const BG0_HEIGHT, 0xFF110E
+.const BG0_PALETTE_BASE, 0xFF1111
+
+render_background:
+    mov r0, CORRUPTED_LAYER_CONTROL
+    store @BG0_CONTROL, r0
+
+    mov r0, CORRUPTED_MAP_HEIGHT
+    store @BG0_HEIGHT, r0
+
+    mov r0, CORRUPTED_MAP_WIDTH
+    store @BG0_WIDTH, r0
+
+    mov r0, 0
+    store @BG0_SCROLL_X, r0
+    store @BG0_SCROLL_Y, r0
+
+    mov r0, BG_PALETTE 
+    store @BG0_PALETTE_BASE, r0
+
+    ret

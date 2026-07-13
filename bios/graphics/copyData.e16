@@ -20,6 +20,9 @@
 .const PALETTE_BASE, 0xFF1800
 .const SPR_TILES, 0x048000
 
+.const SPR_BG_BASE, 0x040000
+.const BG_MAP_BASE, 0x04C000
+
 .const E_PALETTE, 0
 .const M_PALETTE, 1
 .const B_PALETTE, 2
@@ -27,6 +30,7 @@
 .const R_PALETTE, 4
 .const ONE_PALETTE, 5
 .const SIX_PALETTE, 6
+.const BG_PALETTE, 7
 
 copy_title_palette:
     dma_copy e_palette, PALETTE_BASE + (E_PALETTE * 32), E_PALETTE_BYTES
@@ -48,12 +52,14 @@ copy_letters:
     dma_copy six_tiles, SPR_TILES + (SIX_FIRST_TILE * 32), SIX_SPRITE_BYTES * SIX_SPRITE_COUNT
     ret
 
-delete_title_palette:
-    dma_copy e_palette, PALETTE_BASE + (E_PALETTE * 32), E_PALETTE_BYTES
-    dma_copy m_palette, PALETTE_BASE + (M_PALETTE * 32), M_PALETTE_BYTES
-    dma_copy b_palette, PALETTE_BASE + (B_PALETTE * 32), B_PALETTE_BYTES
-    dma_copy e2_palette, PALETTE_BASE + (E2_PALETTE * 32), E2_PALETTE_BYTES
-    dma_copy r_palette, PALETTE_BASE + (R_PALETTE * 32), R_PALETTE_BYTES
-    dma_copy one_palette, PALETTE_BASE + (ONE_PALETTE * 32), ONE_PALETTE_BYTES
-    dma_copy six_palette, PALETTE_BASE + (SIX_PALETTE * 32), SIX_PALETTE_BYTES
+copy_corrupted:
+    dma_copy corrupted_palette, PALETTE_BASE + (BG_PALETTE * 32), CORRUPTED_PALETTE_BYTES
+    dma_copy corrupted_tiles, SPR_BG_BASE, CORRUPTED_TILES_BYTES
+    dma_copy corrupted_map, BG_MAP_BASE, CORRUPTED_MAP_BYTES 
+    ret
+
+copy_missing:
+    dma_copy missing_palette, PALETTE_BASE + (BG_PALETTE * 32), MISSING_PALETTE_BYTES
+    dma_copy missing_tiles, SPR_BG_BASE, MISSING_TILES_BYTES
+    dma_copy missing_map, BG_MAP_BASE, MISSING_MAP_BYTES
     ret
