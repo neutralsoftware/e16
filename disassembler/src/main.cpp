@@ -37,6 +37,7 @@ enum class Group {
 
 enum class Form {
     NoOperands,
+    Jump,
     Branch,
     Call,
     Enter,
@@ -265,9 +266,9 @@ bool isNoOperand(const std::string &name) {
 }
 
 bool isBranch(const std::string &name) {
-    static const std::array<std::string_view, 16> names = {
-        "jmp", "bra", "beq", "bne", "bcs", "bcc", "bmi", "bpl",
-        "bvs", "bvc", "bgt", "bge", "blt", "ble", "bhi", "bls"};
+    static const std::array<std::string_view, 15> names = {
+        "bra", "beq", "bne", "bcs", "bcc", "bmi", "bpl", "bvs",
+        "bvc", "bgt", "bge", "blt", "ble", "bhi", "bls"};
 
     return std::find(names.begin(), names.end(), std::string_view{name}) !=
            names.end();
@@ -310,7 +311,7 @@ Group groupFor(const std::string &name) {
     if (name == "cmp") {
         return Group::Compare;
     }
-    if (isBranch(name)) {
+    if (name == "jmp" || isBranch(name)) {
         return Group::Branch;
     }
     if (name == "call" || name == "ret" || name == "enter" ||
@@ -333,6 +334,9 @@ Group groupFor(const std::string &name) {
 Form formFor(const std::string &name, int operandCount) {
     if (isNoOperand(name)) {
         return Form::NoOperands;
+    }
+    if (name == "jmp") {
+        return Form::Jump;
     }
     if (isBranch(name)) {
         return Form::Branch;
@@ -649,6 +653,15 @@ std::vector<Candidate> candidatesAt(
     case Form::NoOperands:
         candidates.push_back(
             Candidate{1, 100, makeInstruction(spec, address, {opcode}, {})});
+        break;
+    case Form::Jump:
+        if (canRead(bytes, offset, 4)) {
+            std::uint32_t target = read24(bytes, offset + 1);
+            DecodedLine line = makeInstruction(
+                spec, address, sliceBytes(bytes, offset, 4), {hexValue(target, 6)});
+            line.target = target;
+            candidates.push_back(Candidate{4, 105, line});
+        }
         break;
     case Form::Branch:
         if (canRead(bytes, offset, 3)) {

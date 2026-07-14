@@ -210,12 +210,11 @@ bool isStore(const std::string &opcode) {
 }
 
 bool isBranch(const std::string &opcode) {
-    return opcode == "jmp" || opcode == "bra" || opcode == "beq" ||
-           opcode == "bne" || opcode == "bcs" || opcode == "bcc" ||
-           opcode == "bmi" || opcode == "bpl" || opcode == "bvs" ||
-           opcode == "bvc" || opcode == "bgt" || opcode == "bge" ||
-           opcode == "blt" || opcode == "ble" || opcode == "bhi" ||
-           opcode == "bls";
+    return opcode == "bra" || opcode == "beq" || opcode == "bne" ||
+           opcode == "bcs" || opcode == "bcc" || opcode == "bmi" ||
+           opcode == "bpl" || opcode == "bvs" || opcode == "bvc" ||
+           opcode == "bgt" || opcode == "bge" || opcode == "blt" ||
+           opcode == "ble" || opcode == "bhi" || opcode == "bls";
 }
 
 bool isNoOperandOpcode(const std::string &opcode) {
@@ -540,6 +539,13 @@ std::size_t Compiler::instructionSize(const Instruction &instruction) const {
                                        " does not accept operands.");
         }
         return 1;
+    }
+
+    if (instruction.opcode == "jmp") {
+        if (ops.size() != 1) {
+            fail(instruction.line, "jmp expects exactly one operand.");
+        }
+        return 4;
     }
 
     if (isBranch(instruction.opcode)) {
@@ -887,6 +893,12 @@ void Compiler::emitInstruction(const Instruction &instruction,
     emit8(bytes, opcode);
 
     if (isNoOperandOpcode(instruction.opcode)) {
+        return;
+    }
+
+    if (instruction.opcode == "jmp") {
+        emit24(bytes,
+               checkedAddress(resolve(ops[0]), instruction.line, ops[0].base));
         return;
     }
 

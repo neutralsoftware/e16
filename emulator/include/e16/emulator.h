@@ -20,6 +20,7 @@ struct EmulatorOptions {
     bool debug = false;
     bool headless = false;
     bool windowed = false;
+    bool muted = false;
 };
 
 class Emulator {

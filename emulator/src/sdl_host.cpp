@@ -123,7 +123,8 @@ SdlHost::~SdlHost() {
     SDL_Quit();
 }
 
-bool SdlHost::open(int scale, Apu &apu, bool forceHeadless, bool windowed) {
+bool SdlHost::open(int scale, Apu &apu, bool forceHeadless, bool windowed,
+                   bool muted) {
     SDL_SetLogOutputFunction(sdlLog, nullptr);
     int version = SDL_GetVersion();
     std::ostringstream versionText;
@@ -180,7 +181,9 @@ bool SdlHost::open(int scale, Apu &apu, bool forceHeadless, bool windowed) {
         logInfo("gamepad disabled: " + std::string(SDL_GetError()));
     }
 
-    if (SDL_InitSubSystem(SDL_INIT_AUDIO)) {
+    if (muted) {
+        logInfo("audio disabled by -m");
+    } else if (SDL_InitSubSystem(SDL_INIT_AUDIO)) {
         SDL_AudioSpec spec{};
         spec.format = SDL_AUDIO_F32;
         spec.channels = 2;

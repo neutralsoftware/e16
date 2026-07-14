@@ -11,7 +11,7 @@ namespace {
 
 void usage() {
     const std::string text =
-        "usage: e16emu [-s] [-w] [--headless] [--load-address addr] "
+        "usage: e16emu [-s] [-w] [-m] [--headless] [--load-address addr] "
         "[--scale n] program.bin";
     e16::logInfo(text);
     std::cerr << text << '\n';
@@ -40,6 +40,8 @@ int main(int argc, char **argv) {
                 options.debug = true;
             } else if (arg == "-w") {
                 options.windowed = true;
+            } else if (arg == "-m") {
+                options.muted = true;
             } else if (arg == "--headless") {
                 options.headless = true;
             } else if (arg == "--load-address" && i + 1 < argc) {

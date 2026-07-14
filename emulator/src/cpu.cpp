@@ -107,7 +107,11 @@ StopReason Cpu::step() {
     if (isUnary(opcode)) {
         return execUnary(opcode);
     }
-    if (opcode >= 0x60 && opcode <= 0x6F) {
+    if (opcode == 0x60) {
+        s.pc = fetch24();
+        return StopReason::None;
+    }
+    if (opcode >= 0x61 && opcode <= 0x6F) {
         std::int16_t relative = static_cast<std::int16_t>(fetch16());
         if (branchCondition(opcode)) {
             s.pc = mask24(static_cast<std::uint32_t>(

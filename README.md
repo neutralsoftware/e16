@@ -137,12 +137,13 @@ Usage: e16asm [--base address] [-o output.bin] [--print-ast] file.e16
 ### `e16emu`
 
 ```text
-usage: e16emu [-s] [-w] [--headless] [--load-address addr] [--scale n] program.bin
+usage: e16emu [-s] [-w] [-m] [--headless] [--load-address addr] [--scale n] program.bin
 ```
 
 - `-s`: enable debugger mode.
 - `-w`: run in a window and leave the cursor visible.
 - `--headless`: run without creating a window, including on Linux systems without a desktop environment.
+- `-m`: disable audio playback.
 - `--load-address`: choose where the binary is loaded.
 - `--scale`: set the initial emulator display scale.
 - The emulator opens fullscreen by default and letterboxes the 320x180 display.

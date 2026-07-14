@@ -60,7 +60,7 @@ const std::unordered_map<std::uint8_t, OpInfo> &ops() {
 }
 
 bool branch(std::uint8_t opcode) {
-    return opcode >= 0x60 && opcode <= 0x6F;
+    return opcode >= 0x61 && opcode <= 0x6F;
 }
 
 bool noOperands(std::uint8_t opcode) {
@@ -109,6 +109,10 @@ DecodedInstruction Disassembler::decode(std::uint32_t address) const {
     const char *name = found->second.name;
     if (noOperands(opcode)) {
         return {address, 1, bytes(address, 1), name, true};
+    }
+    if (opcode == 0x60) {
+        return {address, 4, bytes(address, 4),
+                std::string(name) + " " + hex(read24(address + 1), 6), true};
     }
     if (branch(opcode)) {
         std::int16_t rel = readS16(address + 1);

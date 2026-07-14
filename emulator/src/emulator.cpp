@@ -70,7 +70,8 @@ int Emulator::run() {
     memory.configureSaveRam(savePath);
     cpu.reset(BiosRomBase);
 
-    if (!sdl.open(options.scale, apu, options.headless, options.windowed)) {
+    if (!sdl.open(options.scale, apu, options.headless, options.windowed,
+                  options.muted)) {
         logError("SDL: " + sdl.error());
         return 1;
     }
